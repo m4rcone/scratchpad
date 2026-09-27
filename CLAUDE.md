@@ -1,55 +1,62 @@
 # Project context
 
-Chrome extension (MV3) that replaces the new tab with a markdown scratchpad.
-Audience: developers who work with AI. Free, MIT, no account, no network.
+Chrome extension (MV3): a markdown scratchpad opened from the toolbar icon, in a
+tab of its own. Audience: developers who work with AI. Free, MIT, no account, no
+network.
 
-Repository: <https://github.com/m4rcone/scratchpad-newtab>.
-Everything in this repository — code, comments, docs, commits, issues and PRs —
-is written in English.
+Repository: <https://github.com/m4rcone/scratchpad-newtab>. Everything in this
+repository — code, comments, docs, commits, issues and PRs — is written in
+English.
 
 ## Non-negotiable principles
 
 1. Nothing waits on the disk. The editor is mounted and focused before the first
    read from IndexedDB, and whatever is typed while that read is in flight
-   becomes a draft instead of being lost. (Until September 2026 this principle
-   read "nothing delays the first character", guaranteed by a static
-   `<textarea>`; ByteMD is a component and only exists after the bundle runs.
-   See `docs/adr/0001-bytemd-instead-of-a-hand-written-editor.md`.)
+   becomes a draft instead of being lost.
 2. Saving is automatic and silent.
-3. No network request. No telemetry. No permission beyond what is needed — every
-   new permission requires a justification in the README.
+3. No network request. No telemetry. No permission beyond what is needed — a new
+   permission needs a justification in the README. The manifest's content
+   security policy enforces this (`connect-src 'none'`, nothing remote in
+   `img-src`); loosening it needs an issue first.
 4. Markdown is the editing format.
 5. A new feature only lands by cutting another one. When in doubt, do not
    implement: open an issue with the proposal.
 
 ## Stack
 
-TypeScript, Vite, IndexedDB for content, `chrome.storage.local` for preferences.
-No UI framework: the shell around the editor is static markup plus a handful of
-modules that paint `innerHTML`.
+TypeScript, Vite, IndexedDB for content, `chrome.storage.local` for
+preferences. No UI framework: the shell is static markup plus a few modules that
+paint `innerHTML`. `src/background.ts` is the service worker behind the toolbar
+icon and the `Alt+Shift+S` command (`⌥⇧S` on macOS, where Chrome reads `Alt`
+as Option).
 
-The editor and the preview are [ByteMD](https://bytemd.js.org/) — CodeMirror 5,
-remark and rehype — with six plugins: `gfm`, `highlight-ssr`, `math`, `mermaid`,
-`breaks` and `gemoji`. `src/app/editor.ts` is only a wrapper around the
-component; `src/app/plugins.ts` is the single place that decides what markdown
+The editor and preview are [ByteMD](https://bytemd.js.org/) (CodeMirror 5,
+remark, rehype) with six plugins: `gfm`, `highlight-ssr`, `math`, `mermaid`,
+`breaks`, `gemoji`. `src/app/editor.ts` wraps the component and types the slice
+of its Svelte API it uses by hand (neither Svelte nor its compiler is
+installed); `src/app/plugins.ts` is the only place that decides what markdown
 means here.
 
-ByteMD is a Svelte component, but Svelte's runtime already ships compiled inside
-`bytemd/dist` — the project installs neither the compiler nor the `svelte`
-package, and the slice of the API actually used is typed by hand in `editor.ts`.
+The app owns the view state: `data-mode` is `write`, `split` or `read`.
+ByteMD's own right-hand toolbar buttons 2–5 (write only, preview only,
+fullscreen, GitHub) are hidden in `bytemd.css`; the app's split, read and Ko-fi
+buttons come from the bridge plugin in `editor.ts` and sit at indexes 6, 7
+and 8. A ByteMD upgrade that reorders those buttons breaks that CSS.
+
+Markdown markers stay visible, dimmed. Obsidian-style live preview (markers
+hidden until the caret reaches them) was declined: it means hand-built widgets
+on top of CodeMirror 5. Reading happens in the `read` view.
 
 ## Working rules
 
-- Persistence always sits behind the `Storage` interface; never call IndexedDB
-  directly from the UI layer.
-- A new shortcut means checking two keymaps first: the eight actions on ByteMD's
-  toolbar, and CodeMirror's `macDefault`/`pcDefault`. The editor gets the key
-  before the page does, so a shared chord is not contested, it is lost.
-- Architecture decisions become a short ADR in `docs/adr/`.
-- `npm test` runs on Node's own runner, with no dependency: every pure behaviour
-  that is still ours (titles, slugs, excerpts, grouping) lands with a test.
-  Markdown stopped being ours and therefore stopped being tested here.
-- Releases: bump the same version in `package.json` and in
-  `public/manifest.json`, and add the entry to `CHANGELOG.md`. Chrome only
-  accepts one to four dot-separated integers in the manifest, so no `-beta`
-  suffixes there.
+- Persistence sits behind the `Storage` interface; the UI never calls IndexedDB.
+- A new shortcut means checking ByteMD's toolbar actions and CodeMirror's
+  `macDefault`/`pcDefault` first: the editor gets the key before the page, so a
+  shared chord is lost.
+- `npm test` uses Node's own runner, no dependency. Pure behaviour that is ours
+  (titles, slugs, snippets, grouping, view toggles) lands with a test; markdown
+  rendering is ByteMD's and is not tested here.
+- `npm run dev` has no content security policy; check anything network-related
+  on a build.
+- Releases: the same version in `package.json` and `public/manifest.json`
+  (integers only), an entry in `CHANGELOG.md`.

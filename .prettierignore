@@ -1,8 +1,3 @@
 dist
 node_modules
 package-lock.json
-
-# A fixture, not a document: Prettier normalizes exactly the variations it
-# exists to exercise — `*italic*` would become `_italic_`, the `~~~` fence
-# would become backticks and `~single tilde~` would become `~~strikethrough~~`.
-docs/fixtures/formatting.md

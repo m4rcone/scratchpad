@@ -1,25 +1,20 @@
 # Security policy
 
-## Supported versions
+Only the latest release is supported.
 
-The latest release is the only supported one.
+## Scope
 
-## What the extension does with your data
+The extension stores drafts locally and makes no network requests (see
+[PRIVACY.md](PRIVACY.md)); the manifest's content security policy allows
+nothing outside the extension package. The interesting reports are about the
+preview, where HTML in a draft is sanitized with `hast-util-sanitize` under
+GitHub's rules: a way to run script, or to make the page issue a request despite
+the policy.
 
-Nothing leaves your machine. There is no network request, no telemetry and no
-account. Drafts live in IndexedDB and preferences in `chrome.storage.local`, in
-your own Chrome profile. The only permission requested is `storage`; there is no
-host permission and no access to what you browse.
+## Reporting
 
-The one place untrusted input meets rendering is the preview: HTML embedded in a
-draft is sanitized with `hast-util-sanitize` under GitHub's policy before being
-rendered. Reports about that path are the most interesting ones.
-
-## Reporting a vulnerability
-
-Please **do not open a public issue**. Use GitHub's private reporting instead:
-**Security → Report a vulnerability** on
+Please **do not open a public issue**. Report it privately under
+**Security → Report a vulnerability**:
 <https://github.com/m4rcone/scratchpad-newtab/security/advisories/new>.
 
-Include what you did, what happened, and which version and Chrome build you saw
-it on. Expect a first reply within a week.
+Say what you did, what happened, and which version and Chrome build you used.
