@@ -45,6 +45,8 @@ export interface Editor {
   setText(text: string, caret?: number): void;
   getText(): string;
   focus(): void;
+  /** Selects the whole draft, for when the clipboard refuses a copy. */
+  selectAll(): void;
   /** Re-measure after the host goes from hidden to visible. */
   refresh(): void;
   setMode(mode: Mode): void;
@@ -52,7 +54,50 @@ export interface Editor {
   onInput(handler: (text: string, caret: number) => void): void;
   onCaret(handler: (caret: number) => void): void;
   onFocus(handler: () => void): void;
+  /** The view buttons on ByteMD's toolbar, which the app's mode answers to. */
+  onToggleView(handler: (mode: Exclude<Mode, 'write'>) => void): void;
 }
+
+/**
+ * CodeMirror's markdown mode, told to tag what it already recognises. With
+ * `highlightFormatting` every marker — `#`, `**`, `>`, `-`, the backticks — gets
+ * a `cm-formatting` class, which is what lets the stylesheet mute the marks and
+ * leave the words alone. The overrides rename the classes the mode borrows from
+ * programming languages: list levels would otherwise arrive as `variable-2`,
+ * `variable-3` and `keyword`, and emoji as `builtin`.
+ */
+const EDITOR_MODE = {
+  name: 'yaml-frontmatter',
+  // Typed as a mode name, but `getMode` resolves a whole spec here as well.
+  base: {
+    name: 'gfm',
+    highlightFormatting: true,
+    tokenTypeOverrides: { list1: 'list', list2: 'list', list3: 'list', emoji: 'emoji' },
+  } as unknown as string,
+};
+
+/**
+ * The toolbar's own icons, drawn on ByteMD's 48-unit grid with its 4-unit
+ * stroke so they sit among the built-in ones: two panes side by side for the
+ * split view, an eye for reading, a cup for Ko-fi.
+ */
+const svg = (body: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 48 48" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const SPLIT_ICON = svg(
+  '<rect width="36" height="36" x="6" y="6" rx="2"/><path d="M24 6v36"/>',
+);
+const READ_ICON = svg(
+  '<path d="M4 24s7-13 20-13 20 13 20 13-7 13-20 13S4 24 4 24Z"/><circle cx="24" cy="24" r="6"/>',
+);
+const SUPPORT_ICON = svg(
+  '<path d="M8 18h26v12a10 10 0 0 1-10 10h-6A10 10 0 0 1 8 30V18Z"/><path d="M34 21h3a5 5 0 0 1 0 10h-3"/><path d="M16 6v6M24 6v6"/>',
+);
+
+/**
+ * The only address the app knows. It opens in a tab of its own when the
+ * writer clicks the cup; nothing is ever fetched from it.
+ */
+const SUPPORT_URL = 'https://ko-fi.com/m4rcone';
 
 export function createEditor(
   host: HTMLElement,
@@ -62,6 +107,9 @@ export function createEditor(
   const inputHandlers: ((text: string, caret: number) => void)[] = [];
   const caretHandlers: ((caret: number) => void)[] = [];
   const focusHandlers: (() => void)[] = [];
+  const viewHandlers: ((mode: Exclude<Mode, 'write'>) => void)[] = [];
+  const toggleView = (mode: Exclude<Mode, 'write'>) =>
+    viewHandlers.forEach((handler) => handler(mode));
 
   let cm: CodeMirrorEditor | null = null;
   let text = '';
@@ -88,8 +136,38 @@ export function createEditor(
     cm.setCursor(cm.posFromIndex(clamp(caret)));
   }
 
-  /** Not a markdown plugin: the hook ByteMD offers is the only way in. */
+  /**
+   * Not a markdown plugin: the hook ByteMD offers is the only way in. It also
+   * carries the toolbar buttons the app adds, since a plugin's `right` actions
+   * are the only thing ByteMD lets in beside its own. ByteMD `unshift`s each
+   * one, so the list is written in display order and reversed on the way in;
+   * they land after ByteMD's six built-ins, at indexes 6, 7 and 8, which is
+   * how `bytemd.css` finds them.
+   */
   const bridge: BytemdPlugin = {
+    actions: [
+      {
+        position: 'right' as const,
+        title: strings.splitToggle,
+        icon: SPLIT_ICON,
+        handler: { type: 'action' as const, click: () => toggleView('split') },
+      },
+      {
+        position: 'right' as const,
+        title: strings.readToggle,
+        icon: READ_ICON,
+        handler: { type: 'action' as const, click: () => toggleView('read') },
+      },
+      {
+        position: 'right' as const,
+        title: strings.support,
+        icon: SUPPORT_ICON,
+        handler: {
+          type: 'action' as const,
+          click: () => window.open(SUPPORT_URL, '_blank', 'noopener,noreferrer'),
+        },
+      },
+    ].reverse(),
     editorEffect({ editor }) {
       if (cm === editor) return;
       cm = editor;
@@ -127,8 +205,13 @@ export function createEditor(
       mode: BYTEMD_MODE,
       plugins: withBridge(theme),
       placeholder: strings.emptyHint,
-      // Two spaces, never a tab: the same indent the exported `.md` carries.
-      editorConfig: { tabSize: 2, indentUnit: 2, indentWithTabs: false },
+      editorConfig: {
+        mode: EDITOR_MODE,
+        // Two spaces, never a tab: the same indent the exported `.md` carries.
+        tabSize: 2,
+        indentUnit: 2,
+        indentWithTabs: false,
+      },
     },
   });
 
@@ -139,6 +222,40 @@ export function createEditor(
     component.$set({ value: text });
     if (loading) return;
     for (const handler of inputHandlers) handler(text, caretNow());
+  });
+
+  /**
+   * A link in the preview must not take the scratchpad's own tab somewhere
+   * else. Outside links get a new tab — set on the anchor rather than opened by
+   * hand, so ⌘-click and middle-click keep meaning what they always do.
+   * In-page links (footnotes, and their way back) scroll the preview instead of
+   * writing a fragment into the page URL.
+   */
+  host.addEventListener('click', (event) => {
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>(
+      '.bytemd-preview a[href]',
+    );
+    if (!anchor) return;
+    const href = anchor.getAttribute('href') ?? '';
+    if (!href.startsWith('#')) {
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      return;
+    }
+    event.preventDefault();
+    let id = href.slice(1);
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      /* a stray `%` in a hand-written link: look the fragment up as typed */
+    }
+    // The sanitizer prefixes every id with `user-content-`; a hand-written
+    // `#heading` link names the unprefixed one, which may not exist at all.
+    const preview = anchor.closest('.bytemd-preview');
+    const target =
+      preview?.querySelector(`[id="${CSS.escape(id)}"]`) ??
+      preview?.querySelector(`[id="user-content-${CSS.escape(id)}"]`);
+    target?.scrollIntoView({ block: 'start' });
   });
 
   return {
@@ -162,23 +279,34 @@ export function createEditor(
       if (cm) cm.focus();
       else pendingFocus = true;
     },
+    selectAll() {
+      if (!cm) return;
+      cm.focus();
+      cm.execCommand('selectAll');
+    },
     // CodeMirror measures the DOM to lay lines out, and measuring something
     // with `display: none` yields nothing — so text set while the editor was
     // hidden is in the document but not on screen until it is told to look
     // again. Focusing happened to trigger that, which is why the stale text
     // used to correct itself the moment the writer clicked into it.
     refresh: () => cm?.refresh(),
-    // Folding the preview away is CSS, but unfolding it is not: mermaid lays
-    // diagrams out with `getBBox`, and a `display: none` preview measures zero.
-    // A flowchart drawn while folded comes back as a 16x16 box with
-    // `translate(undefined, NaN)` on its edge labels, and revealing it does not
-    // repair the SVG that was already written — only a fresh render does. So
-    // opening the preview re-renders the viewer, now that it has a size, with
-    // the same lever `setTheme` pulls below.
+    // Folding either pane away is CSS, but unfolding it is not.
+    //
+    // The preview: mermaid lays diagrams out with `getBBox`, and a
+    // `display: none` preview measures zero. A flowchart drawn while folded
+    // comes back as a 16x16 box with `translate(undefined, NaN)` on its edge
+    // labels, and revealing it does not repair the SVG that was already
+    // written — only a fresh render does. So unfolding the preview re-renders
+    // the viewer, now that it has a size, with the same lever `setTheme` pulls.
+    //
+    // The editor: CodeMirror measured nothing while reading hid it, so it is
+    // asked to measure again the moment it is back.
     setMode(next) {
-      const wasFolded = host.dataset.mode === 'write';
+      const was = host.dataset.mode;
       host.dataset.mode = next;
-      if (next === 'split' && wasFolded) component.$set({ plugins: withBridge(painted) });
+      if (was === 'write' && next !== 'write')
+        component.$set({ plugins: withBridge(painted) });
+      if (was === 'read' && next !== 'read') cm?.refresh();
     },
     // Mermaid draws its colours into the SVG, so a theme change is a new plugin
     // list rather than a stylesheet swap.
@@ -189,5 +317,6 @@ export function createEditor(
     onInput: (handler) => inputHandlers.push(handler),
     onCaret: (handler) => caretHandlers.push(handler),
     onFocus: (handler) => focusHandlers.push(handler),
+    onToggleView: (handler) => viewHandlers.push(handler),
   };
 }

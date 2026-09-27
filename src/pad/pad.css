@@ -14,12 +14,15 @@
   --code: #c9b48a;
   --code-bg: #16161a;
   --selection: rgba(134, 169, 234, 0.14);
+  --danger: #f0736c;
 
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --editor-size: 15px;
   --editor-line: 1.7;
+  --preview-size: 16px;
+  --preview-line: 1.65;
   --ui-size: 12.5px;
   --measure: 72ch;
   --gutter: 56px;
@@ -40,6 +43,7 @@
     --code: #8a6d2f;
     --code-bg: #f2f0ea;
     --selection: rgba(47, 95, 190, 0.1);
+    --danger: #c9342c;
     color-scheme: light;
   }
 }
@@ -54,6 +58,7 @@
   --code: #8a6d2f;
   --code-bg: #f2f0ea;
   --selection: rgba(47, 95, 190, 0.1);
+  --danger: #c9342c;
   color-scheme: light;
 }
 
@@ -81,6 +86,12 @@ body {
 
 ::selection {
   background: var(--selection);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button {
@@ -115,17 +126,25 @@ button {
 
 /* ---------- rail ---------- */
 
+/* Only the list scrolls: the foot with "new draft" and search stays put,
+   however many drafts pile up above it. */
 .rail {
   width: 240px;
   flex: none;
-  padding: 40px 0 0 var(--safe-left);
+  padding: 0 0 0 var(--safe-left);
+  border-right: 1px solid var(--hair);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   font-size: var(--ui-size);
 }
 
 .rail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: 40px;
   display: flex;
   flex-direction: column;
 }
@@ -173,7 +192,7 @@ button {
 }
 
 .rail__foot {
-  margin-top: auto;
+  flex: none;
   padding: 12px 24px calc(20px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
@@ -251,8 +270,10 @@ button {
   flex: none;
 }
 
+/* Delete is the one action that loses something, so it warns in red — on
+   hover, and while it waits for the confirming second press. */
 .footer__action.is-armed {
-  color: var(--accent);
+  color: var(--danger);
 }
 
 /* ---------- search ---------- */
@@ -399,8 +420,16 @@ button {
     color: var(--muted);
   }
 
+  .rail__row:hover .rail__title {
+    color: var(--ink);
+  }
+
   .footer__action:hover {
     color: var(--ink);
+  }
+
+  .footer__action[data-action='delete']:hover {
+    color: var(--danger);
   }
 }
 
@@ -430,8 +459,13 @@ button {
     inset: 0;
     z-index: 2;
     width: 100%;
+    border-right: none;
     background: var(--bg);
-    padding: 20px var(--safe-right) 0 var(--safe-left);
+    padding: 0 var(--safe-right) 0 var(--safe-left);
+  }
+
+  .rail__list {
+    padding-top: 20px;
   }
 
   .rail.is-open {

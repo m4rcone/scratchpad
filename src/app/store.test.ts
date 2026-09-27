@@ -196,3 +196,20 @@ test('a mirror written in the older single-draft shape is still recovered', asyn
   assert.equal(active?.text, 'typed just before the upgrade');
   assert.equal(store.state.drafts.length, 1, 'it replaces the older copy, not joins it');
 });
+
+test('each view button switches back to writing, or straight to its view', async () => {
+  const { disk, release } = slowDisk([draft({})]);
+  const store = createStore(disk, noPrefs, 'system');
+  release();
+  await store.load(() => '');
+
+  store.toggleMode('read');
+  assert.equal(store.state.mode, 'read');
+  store.toggleMode('split');
+  assert.equal(store.state.mode, 'split');
+  store.toggleMode('split');
+  assert.equal(store.state.mode, 'write');
+  store.toggleMode('read');
+  store.toggleMode('read');
+  assert.equal(store.state.mode, 'write');
+});

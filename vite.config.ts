@@ -23,7 +23,8 @@ function katexWoff2Only(): Plugin {
   };
 }
 
-// MV3 extension build: every extension page is its own HTML entry point.
+// MV3 extension build: every extension page is its own HTML entry point, and
+// the service worker behind the toolbar icon is a script entry of its own.
 // The manifest and the icons come from `public/` and are copied verbatim.
 export default defineConfig({
   root: 'src',
@@ -42,7 +43,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       input: {
-        newtab: 'src/newtab/index.html',
+        pad: 'src/pad/index.html',
+        background: 'src/background.ts',
+      },
+      output: {
+        // The manifest names the service worker by path, so that one entry
+        // keeps a fixed name; everything else stays hashed under `assets/`.
+        entryFileNames: (chunk) =>
+          chunk.name === 'background' ? 'background.js' : 'assets/[name]-[hash].js',
       },
     },
   },

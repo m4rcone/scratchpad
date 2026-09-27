@@ -1,12 +1,11 @@
 {
   "name": "scratchpad",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "A markdown scratchpad on the Chrome new tab (MV3). No account, no network, data stays on your machine.",
+  "description": "A markdown scratchpad on the Chrome toolbar (MV3). No account, no network, data stays on your machine.",
   "keywords": [
     "chrome-extension",
     "manifest-v3",
-    "new-tab",
     "markdown",
     "scratchpad",
     "notes",
@@ -36,6 +35,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "icons": "node scripts/generate-icons.mjs",
+    "package": "npm run build && rm -f scratchpad.zip && cd dist && zip -qr ../scratchpad.zip . -x '*.map'",
     "test": "node --test \"src/**/*.test.ts\""
   },
   "devDependencies": {

@@ -19,6 +19,30 @@ test('the title is the first non-empty line, without the marker', () => {
   assert.equal(titleOf('#'.repeat(3) + ' deep'), 'deep');
 });
 
+test('the title drops the block marker in front of the first line', () => {
+  assert.equal(titleOf('> a quoted line'), 'a quoted line');
+  assert.equal(titleOf('- a list item'), 'a list item');
+  assert.equal(titleOf('3. third step'), 'third step');
+  assert.equal(titleOf('- [ ] ship it'), 'ship it');
+  assert.equal(titleOf('* [x] shipped'), 'shipped');
+});
+
+test('the title reads inline markup as the preview would show it', () => {
+  assert.equal(titleOf('**Plan** for `parser`'), 'Plan for parser');
+  assert.equal(titleOf('read [the docs](https://example.com)'), 'read the docs');
+  assert.equal(titleOf('![diagram](https://example.com/a.png)'), 'diagram');
+  assert.equal(titleOf('see <https://example.com>'), 'see https://example.com');
+  assert.equal(titleOf('an *emphasised* word'), 'an emphasised word');
+  assert.equal(titleOf('~~old~~ new'), 'old new');
+});
+
+test('the title leaves what only looks like markup alone', () => {
+  assert.equal(titleOf('rename user_id to account_id'), 'rename user_id to account_id');
+  assert.equal(titleOf('2 * 3 * 4'), '2 * 3 * 4');
+  assert.equal(titleOf('#hashtag'), '#hashtag');
+  assert.equal(titleOf('-not a list'), '-not a list');
+});
+
 test('the slug survives accents and punctuation', () => {
   assert.equal(
     slugOf('# Refatorar o parser de eventos'),
@@ -33,6 +57,12 @@ test('the snippet centres on the match', () => {
   const snippet = snippetOf(text, 'needle');
   assert.ok(snippet.includes('needle'));
   assert.ok(snippet.startsWith('…'));
+});
+
+test('with no query the snippet is the body, not the title again', () => {
+  assert.equal(snippetOf('# Plan\n\nship the fix', ''), 'ship the fix');
+  assert.equal(snippetOf('\n\n  only a title\n', ''), '');
+  assert.equal(snippetOf('title\n## part two\nmore', ''), 'part two more');
 });
 
 test('word count ignores surrounding space', () => {

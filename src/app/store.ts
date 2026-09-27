@@ -6,7 +6,11 @@ import type { Draft, DraftStore, PrefsStore, ThemeChoice } from '../storage/type
 import { newDraft } from './model.ts';
 import { strings } from './strings.ts';
 
-export type Mode = 'write' | 'split';
+/**
+ * What the editor pane shows: the source alone, the source with the preview
+ * beside it, or the preview alone for reading.
+ */
+export type Mode = 'write' | 'split' | 'read';
 
 export interface State {
   drafts: Draft[];
@@ -302,8 +306,13 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       notify();
     },
 
-    toggleMode() {
-      api.setMode(state.mode === 'write' ? 'split' : 'write');
+    /**
+     * Each view button is a switch back to writing: pressing the one already on
+     * returns to `write`, pressing the other goes straight to it — split to
+     * read, or read to split, with no stop in between.
+     */
+    toggleMode(mode: Exclude<Mode, 'write'>) {
+      api.setMode(state.mode === mode ? 'write' : mode);
     },
 
     setTheme(theme: ThemeChoice) {
