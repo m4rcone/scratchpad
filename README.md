@@ -9,8 +9,7 @@ network, your data never leaves your machine.
 
 ![Scratchpad in split view: the markdown source on the left, the rendered preview on the right](.github/screenshot.png)
 
-Version **1.0.0**. Desktop only — Chrome on Android and iOS does not run
-extensions.
+Version **1.0.0**.
 
 ## Principles
 
