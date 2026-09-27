@@ -8,6 +8,12 @@ import { wordCount } from './model.ts';
 import { strings } from './strings.ts';
 import { effectiveTheme } from './theme.ts';
 
+const MODE_STATUS = {
+  write: strings.saved,
+  split: strings.splitting,
+  read: strings.reading,
+};
+
 export function createFooter(root: HTMLElement): (state: State, text: string) => void {
   root.innerHTML = `
     <div class="footer__status"></div>
@@ -25,8 +31,7 @@ export function createFooter(root: HTMLElement): (state: State, text: string) =>
   return (state, text) => {
     status.textContent = state.pendingDelete
       ? strings.deleteConfirm
-      : state.status ||
-        `${strings.words(wordCount(text))} · ${state.mode === 'split' ? strings.splitting : strings.saved}`;
+      : state.status || `${strings.words(wordCount(text))} · ${MODE_STATUS[state.mode]}`;
     remove.classList.toggle('is-armed', state.pendingDelete);
     theme.textContent =
       effectiveTheme(state.theme) === 'dark' ? strings.themeLight : strings.themeDark;

@@ -13,10 +13,18 @@ import gfm from '@bytemd/plugin-gfm';
 import highlight from '@bytemd/plugin-highlight-ssr';
 import math from '@bytemd/plugin-math';
 import mermaid from '@bytemd/plugin-mermaid';
+import { imagePlaceholders } from './images.ts';
+import type { HastNode } from './images.ts';
 
 // KaTeX's own stylesheet. The maths engine itself is behind a dynamic import
 // inside the plugin, so it only loads when a draft actually contains maths.
 import 'katex/dist/katex.min.css';
+
+/** See `images.ts`: the preview never writes an `<img>` the policy would refuse. */
+const noRemoteImages: BytemdPlugin = {
+  rehype: (processor) =>
+    processor.use(() => (tree: unknown) => imagePlaceholders(tree as HastNode)),
+};
 
 export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
   return [
@@ -28,5 +36,6 @@ export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
     mermaid({ theme: theme === 'dark' ? 'dark' : 'default' }),
     breaks(),
     gemoji(),
+    noRemoteImages,
   ];
 }

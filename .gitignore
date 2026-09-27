@@ -3,5 +3,9 @@ dist/
 *.local
 .DS_Store
 
-# Produced by the release workflow when a `v*` tag is packed.
+docs/
+
+# Produced by `npm run package`, and by the release workflow when a `v*` tag is
+# packed.
+scratchpad.zip
 scratchpad-v*.zip

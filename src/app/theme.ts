@@ -32,7 +32,10 @@ export function applyTheme(choice: ThemeChoice): void {
   }
 }
 
-export function effectiveTheme(choice: ThemeChoice): 'dark' | 'light' {
-  if (choice !== 'system') return choice;
+export function systemTheme(): 'dark' | 'light' {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+export function effectiveTheme(choice: ThemeChoice): 'dark' | 'light' {
+  return choice === 'system' ? systemTheme() : choice;
 }

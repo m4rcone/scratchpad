@@ -5,7 +5,7 @@
  * hard-coded greys and a fixed 300px height. Everything below either undoes one
  * of those or fills a gap ByteMD leaves on purpose: it positions `.markdown-body`
  * but never styles it, and `rehype-highlight` emits `hljs-*` classes without a
- * theme. Both are written against the tokens in `newtab.css`, so light, dark and
+ * theme. Both are written against the tokens in `pad.css`, so light, dark and
  * a pinned choice all fall out of the same rules instead of a second stylesheet.
  */
 
@@ -63,6 +63,48 @@
   color: var(--accent);
 }
 
+/*
+ * The right half of the toolbar, trimmed. ByteMD always draws six buttons
+ * there, in this order: contents, help, write only, preview only, fullscreen
+ * and its own GitHub repository. The last four go —
+ *
+ * - write only and preview only drove a second view state beside the app's
+ *   `data-mode`, and the two disagreeing is what once blanked the page;
+ * - fullscreen covered the rail and the footer the app is built around;
+ * - the GitHub button opened a site that is not this project's.
+ *
+ * The app's own buttons, added by the bridge plugin in `editor.ts`, land after
+ * them: split view at 6, reading at 7, Ko-fi at 8. The two view buttons move to
+ * the front of the group, reading first, and light up while their view is on,
+ * so the half reads: read, split · contents, help · support.
+ */
+.bytemd-toolbar-right > [bytemd-tippy-path='2'],
+.bytemd-toolbar-right > [bytemd-tippy-path='3'],
+.bytemd-toolbar-right > [bytemd-tippy-path='4'],
+.bytemd-toolbar-right > [bytemd-tippy-path='5'] {
+  display: none;
+}
+
+.bytemd-toolbar-right > [bytemd-tippy-path='7'] {
+  order: -2;
+}
+
+.bytemd-toolbar-right > [bytemd-tippy-path='6'] {
+  order: -1;
+  margin-right: 12px;
+}
+
+.editor[data-mode='split'] .bytemd-toolbar-right > [bytemd-tippy-path='6'],
+.editor[data-mode='read'] .bytemd-toolbar-right > [bytemd-tippy-path='7'] {
+  color: var(--accent);
+}
+
+/* Reading has no text to format: the buttons would write into a hidden
+   editor. They keep their space, so the bar does not jump between views. */
+.editor[data-mode='read'] .bytemd-toolbar-left {
+  visibility: hidden;
+}
+
 .bytemd-toolbar-icon:hover {
   background: var(--code-bg);
 }
@@ -80,10 +122,10 @@
  * folding the preview pane away. ByteMD writes the pane widths as inline
  * styles (`width:50%`), which is the one thing `!important` is for.
  *
- * The fold is scoped to `.bytemd-split` because ByteMD's toolbar carries its
- * own write-only and preview-only buttons, and they drop that class instead of
- * touching `data-mode`. Unscoped, preview only hid the editor while this hid
- * the preview, and the page went blank.
+ * The fold stays scoped to `.bytemd-split`, the class ByteMD drops in its own
+ * write-only and preview-only views. Those buttons are hidden now (see the
+ * toolbar above), but when they were not, an unscoped fold hid the preview
+ * while ByteMD hid the editor, and the page went blank.
  */
 .editor[data-mode='write'] .bytemd-split .bytemd-preview {
   display: none !important;
@@ -99,6 +141,31 @@
   .bytemd-body:has(> .bytemd-sidebar:not(.bytemd-hidden))
   .bytemd-editor {
   width: calc(100% - 280px) !important;
+}
+
+/*
+ * Reading is the same fold the other way round: the editor goes, the preview
+ * takes the pane, and the text sits in a centred column at reading measure.
+ * The drawer rule mirrors the one above.
+ */
+.editor[data-mode='read'] .bytemd-split .bytemd-editor {
+  display: none !important;
+}
+
+.editor[data-mode='read'] .bytemd-preview {
+  width: 100% !important;
+  border-left: none;
+}
+
+.editor[data-mode='read']
+  .bytemd-body:has(> .bytemd-sidebar:not(.bytemd-hidden))
+  .bytemd-preview {
+  width: calc(100% - 280px) !important;
+}
+
+.editor[data-mode='read'] .bytemd-preview .markdown-body {
+  margin-inline: auto;
+  padding-top: 48px;
 }
 
 /* ---------- the writing surface ---------- */
@@ -120,10 +187,8 @@
 }
 
 /* The measure is what keeps the two columns readable beside each other. Write
-   only has no second column to balance against, so the text takes the pane —
-   whether the fold came from `data-mode` or from ByteMD's own write-only. */
-.editor[data-mode='write'] .bytemd-editor .CodeMirror .CodeMirror-lines,
-.editor .bytemd:not(.bytemd-split) .bytemd-editor .CodeMirror .CodeMirror-lines {
+   only has no second column to balance against, so the text takes the pane. */
+.editor[data-mode='write'] .bytemd-editor .CodeMirror .CodeMirror-lines {
   max-width: none;
 }
 
@@ -155,6 +220,10 @@
 /*
  * Markers stay visible while writing — the point of the plain textarea this
  * replaced — so the marks keep the muted colour and only the content moves.
+ * `cm-formatting` is every marker the markdown mode recognises (`#`, `**`,
+ * `>`, `-`, backticks), tagged because `editor.ts` turns `highlightFormatting`
+ * on. Every other class below is one CodeMirror's default theme would paint in
+ * light-background colours, so each gets a token instead.
  */
 .bytemd .cm-header {
   color: var(--ink);
@@ -166,43 +235,70 @@
   font-style: italic;
 }
 
-.bytemd .cm-link {
+.bytemd .cm-list {
+  color: var(--ink);
+}
+
+.bytemd .cm-link,
+.bytemd .cm-image-alt-text {
   color: var(--accent);
 }
 
 .bytemd .cm-url,
 .bytemd .cm-meta,
-.bytemd .cm-hr {
+.bytemd .cm-hr,
+.bytemd .cm-formatting,
+.bytemd .cm-formatting-link-string,
+.bytemd .cm-bracket {
   color: var(--mark);
 }
 
-.bytemd .cm-comment {
+.bytemd .cm-formatting {
+  font-weight: normal;
+  font-style: normal;
+}
+
+.bytemd .cm-comment,
+.bytemd .cm-emoji {
   color: var(--code);
 }
 
-.bytemd .cm-variable-2,
-.bytemd .cm-variable-3 {
+/* Embedded HTML and the YAML front matter. */
+.bytemd .cm-tag,
+.bytemd .cm-atom,
+.bytemd .cm-def,
+.bytemd .cm-keyword {
   color: var(--muted);
+}
+
+.bytemd .cm-attribute,
+.bytemd .cm-string,
+.bytemd .cm-number {
+  color: var(--mark);
+}
+
+.bytemd .cm-error {
+  color: inherit;
+  text-decoration: underline wavy var(--mark);
 }
 
 /* ---------- the preview ---------- */
 
+/*
+ * The preview is the rendered page, so it reads in the system's own text face
+ * rather than the editor's monospace: prose in the platform sans, code in mono.
+ * The measure is counted in the sans face, so it is wider than the editor's.
+ */
 .bytemd-preview .markdown-body {
-  max-width: var(--measure);
+  max-width: calc(var(--measure) + 8ch);
   margin: 0;
   padding: 32px var(--gutter) 40px;
-  font-family: var(--mono);
-  font-size: var(--editor-size);
-  line-height: var(--editor-line);
+  font-family: var(--sans);
+  font-size: var(--preview-size);
+  line-height: var(--preview-line);
   color: var(--ink);
   overflow-wrap: break-word;
-}
-
-/* Same reasoning as the writing column above: the measure is there to keep two
-   columns readable side by side, so ByteMD's preview only fills the pane the
-   way write only does. */
-.editor .bytemd:not(.bytemd-split) .bytemd-preview .markdown-body {
-  max-width: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .markdown-body > :first-child {
@@ -221,7 +317,8 @@
 }
 
 .markdown-body h1 {
-  font-size: 1.5em;
+  font-size: 1.6em;
+  letter-spacing: -0.01em;
 }
 
 .markdown-body h2 {
@@ -240,6 +337,12 @@
 
 .markdown-body h6 {
   color: var(--muted);
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--hair);
 }
 
 .markdown-body p,
@@ -308,8 +411,39 @@
 
 .markdown-body code {
   font-family: var(--mono);
-  font-size: 0.92em;
+  font-size: 0.86em;
   color: var(--code);
+  background: var(--code-bg);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+
+.markdown-body kbd {
+  font-family: var(--mono);
+  font-size: 0.8em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--hair);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--code-bg);
+}
+
+.markdown-body sub,
+.markdown-body sup {
+  line-height: 0;
+}
+
+.markdown-body details {
+  margin: 0 0 1em;
+}
+
+.markdown-body summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.markdown-body details[open] > summary {
+  margin-bottom: 0.6em;
 }
 
 .markdown-body pre {
@@ -320,13 +454,31 @@
   overflow-x: auto;
 }
 
-.markdown-body pre code {
-  color: var(--ink);
-  font-size: 0.92em;
+.markdown-body pre {
+  font-size: 0.9em;
+  line-height: 1.55;
 }
 
-.markdown-body img {
-  max-width: 100%;
+.markdown-body pre code {
+  color: var(--ink);
+  font-size: inherit;
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+/*
+ * Where a draft has an image, the preview shows a placeholder with its alt
+ * text instead (see `images.ts`): the extension loads nothing remote, and a
+ * refused `<img>` would fill the console with errors.
+ */
+.markdown-body .image-placeholder {
+  display: inline-block;
+  padding: 0.1em 0.6em;
+  border: 1px dashed var(--hair);
+  border-radius: 4px;
+  color: var(--mark);
+  font-size: 0.86em;
 }
 
 .markdown-body table {
@@ -334,6 +486,7 @@
   display: block;
   overflow-x: auto;
   font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
 }
 
 .markdown-body th,
@@ -439,21 +592,65 @@
   background: var(--code-bg);
 }
 
-.tippy-box {
+/*
+ * Tooltips and the toolbar's dropdowns (headings, maths, diagrams). ByteMD
+ * gives the dropdowns tippy's `light-border` theme, white whatever the page
+ * is, so both are repainted on the tokens here and follow the theme.
+ */
+.tippy-box,
+.tippy-box[data-theme~='light-border'] {
   background: var(--code-bg);
   color: var(--ink);
   border: 1px solid var(--hair);
+}
+
+.tippy-box[data-theme~='light-border'] {
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.35);
 }
 
 .tippy-arrow {
   color: var(--code-bg);
 }
 
+.tippy-box[data-theme~='light-border'][data-placement^='bottom'] > .tippy-arrow::before {
+  border-bottom-color: var(--code-bg);
+}
+
+.tippy-box[data-theme~='light-border'][data-placement^='bottom'] > .tippy-arrow::after {
+  border-bottom-color: var(--hair);
+}
+
+.tippy-box[data-theme~='light-border'][data-placement^='top'] > .tippy-arrow::before {
+  border-top-color: var(--code-bg);
+}
+
+.tippy-box[data-theme~='light-border'][data-placement^='top'] > .tippy-arrow::after {
+  border-top-color: var(--hair);
+}
+
+.bytemd-dropdown-title {
+  color: var(--muted);
+  border-bottom-color: var(--hair);
+}
+
+.bytemd-dropdown-item:hover {
+  background-color: var(--hair);
+}
+
 /* ---------- narrow screens ---------- */
 
 @media (max-width: 720px) {
+  /* Twenty-odd buttons do not fit a narrow window, so the bar wraps onto a
+     second row. Not a sideways scroll: tippy mounts the heading, maths and
+     diagram dropdowns inside the bar, and a scrolling bar clips them. */
   .bytemd-toolbar {
-    padding: 0 calc(var(--gutter) - 6px + var(--safe-left));
+    padding: 4px calc(var(--gutter) - 6px + var(--safe-left));
+    flex-wrap: wrap;
+  }
+
+  .bytemd-toolbar-left,
+  .bytemd-toolbar-right {
+    flex-wrap: wrap;
   }
 
   .bytemd-editor .CodeMirror .CodeMirror-lines,

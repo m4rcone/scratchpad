@@ -1,5 +1,5 @@
 /**
- * New tab page: wiring only.
+ * Scratchpad page: wiring only.
  *
  * Order still matters, but it no longer buys the first character: ByteMD's
  * editor is a component, so it exists once its module has run. What is kept is
@@ -16,10 +16,10 @@ import { createRail } from '../app/rail.ts';
 import { createSearch, searchResults } from '../app/search.ts';
 import { createStore } from '../app/store.ts';
 import type { State } from '../app/store.ts';
-import { slugOf } from '../app/model.ts';
+import { slugOf, titleOf } from '../app/model.ts';
 import { isMod } from '../app/platform.ts';
 import { strings } from '../app/strings.ts';
-import { applyTheme, bootTheme, effectiveTheme } from '../app/theme.ts';
+import { applyTheme, bootTheme, effectiveTheme, systemTheme } from '../app/theme.ts';
 import { indexedDbStore } from '../storage/indexeddb.ts';
 import { prefsStore } from '../storage/prefs.ts';
 import type { Draft } from '../storage/types.ts';
@@ -96,7 +96,11 @@ function paint(state: State): void {
     editor.setTheme(nowTheme);
   }
 
+  // From either view, the top bar's button is the way back to the text.
   modeButton.textContent = state.mode === 'write' ? strings.splitView : strings.writeOnly;
+  // The tab strip and the history show which draft this is.
+  const title = active ? titleOf(active.text) : '';
+  document.title = title ? `${title} · ${strings.appName}` : strings.appName;
   paintRail(state);
   paintFooter(state, editor.getText());
 }
@@ -108,6 +112,7 @@ editor.onCaret((caret) => store.moveCaret(caret));
 // Coming back to the text means the delete was not meant: enter must type a
 // newline again, not confirm.
 editor.onFocus(() => store.cancelDelete());
+editor.onToggleView(toggleMode);
 
 // ---------- actions ----------
 
@@ -116,9 +121,8 @@ async function copyAll(): Promise<void> {
     await navigator.clipboard.writeText(editor.getText());
     store.flash(strings.copied);
   } catch {
-    // Clipboard denied: fall back to the selection, which always works.
-    editor.focus();
-    document.execCommand('selectAll');
+    // Clipboard denied: select the draft instead, so ⌘C is one key away.
+    editor.selectAll();
   }
 }
 
@@ -143,13 +147,25 @@ function deleteDraft(): void {
   }
 }
 
+/**
+ * Flips what is on screen. Landing on the system's own theme un-pins the
+ * choice instead of pinning it, so the page follows the system again — the
+ * only way back to "system" without a third state on the button.
+ */
 function toggleTheme(): void {
-  store.setTheme(effectiveTheme(store.state.theme) === 'dark' ? 'light' : 'dark');
+  const next = effectiveTheme(store.state.theme) === 'dark' ? 'light' : 'dark';
+  store.setTheme(next === systemTheme() ? 'system' : next);
 }
 
-function toggleMode(): void {
-  store.toggleMode();
+/** Leaving a view for `write` hands the caret straight back to the text. */
+function toggleMode(mode: 'split' | 'read'): void {
+  store.toggleMode(mode);
   if (store.state.mode === 'write') editor.focus();
+}
+
+function backToWriting(): void {
+  store.setMode('write');
+  editor.focus();
 }
 
 function openDraft(id: string): void {
@@ -175,7 +191,10 @@ const actionOf = (event: Event): string | undefined =>
 topbarEl.addEventListener('click', (event) => {
   const action = actionOf(event);
   if (action === 'rail') store.setRail(!store.state.railOpen);
-  else if (action === 'mode') toggleMode();
+  else if (action === 'mode') {
+    if (store.state.mode === 'write') toggleMode('split');
+    else backToWriting();
+  }
 });
 
 railEl.addEventListener('click', (event) => {
@@ -229,7 +248,7 @@ window
  * listener does, so a shared chord is simply lost: ⌘K writes a link, ⌘⇧C
  * writes a code block, ⌘D deletes a line. Rather than race them from the
  * capture phase, the app moved to shift-chords none of them claim — ⌘⇧F,
- * ⌘⇧D, ⌘⇧A — and CodeMirror lets those bubble up untouched. Adding a
+ * ⌘⇧D, ⌘⇧A, ⌘⇧P — and CodeMirror lets those bubble up untouched. Adding a
  * shortcut means checking both keymaps first; `⌘S` survives only because the
  * `save` command CodeMirror binds it to is never defined.
  */
@@ -246,7 +265,10 @@ window.addEventListener('keydown', (event) => {
     } else if (event.key === '/') {
       // `/` sits on a shifted key on some layouts, so shift is not checked here.
       event.preventDefault();
-      toggleMode();
+      toggleMode('split');
+    } else if (key === 'p' && event.shiftKey) {
+      event.preventDefault();
+      toggleMode('read');
     } else if (key === 'd' && event.shiftKey) {
       event.preventDefault();
       createDraft();
@@ -295,9 +317,9 @@ window.addEventListener('keydown', (event) => {
     return;
   }
 
-  if (event.key === 'Escape' && state.mode === 'split') {
+  if (event.key === 'Escape' && state.mode !== 'write') {
     event.preventDefault();
-    toggleMode();
+    backToWriting();
   }
 });
 

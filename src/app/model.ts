@@ -15,12 +15,26 @@ export function newDraft(text = ''): Draft {
   };
 }
 
-/** The title is the first non-empty line — never a dialog asking for a name. */
+/**
+ * The title is the first non-empty line — never a dialog asking for a name —
+ * read the way the preview would show it: without the block marker in front
+ * (heading, quote, list, task box) and with inline markup reduced to its text.
+ * A draft that opens with `- [ ] ship [the fix](https://…)` is titled
+ * "ship the fix", not with the URL. Underscores are left alone, since they are
+ * as likely to be `snake_case` as emphasis.
+ */
 export function titleOf(text: string): string {
   const first = text.split('\n').find((line) => line.trim());
   if (!first) return '';
   return first
-    .replace(/^#+\s*/, '')
+    .trim()
+    .replace(/^#{1,6}(\s+|$)/, '')
+    .replace(/^(>\s*)+/, '')
+    .replace(/^([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
+    .replace(/(\*\*|~~|`)/g, '')
+    .replace(/(^|\s)\*(\S(?:.*?\S)?)\*(?=\s|$|[.,;:!?])/g, '$1$2')
     .trim()
     .slice(0, 46);
 }
@@ -35,13 +49,26 @@ export function slugOf(text: string): string {
   return slug || 'draft';
 }
 
+/**
+ * The line under a search result. With no query it is the start of the body —
+ * the title is already printed right above it, so repeating it says nothing.
+ * With one, it is a window centred on the first match, title included.
+ */
 export function snippetOf(text: string, query: string): string {
-  const flat = text
-    .replace(/\s+/g, ' ')
-    .replace(/^#+\s*/, '')
-    .trim();
+  const flatten = (value: string) =>
+    value
+      .replace(/\s+/g, ' ')
+      .replace(/^#+\s*/, '')
+      .trim();
+  const flat = flatten(text);
   const limit = 78;
-  if (!query) return flat.slice(0, limit) + (flat.length > limit ? '…' : '');
+  if (!query) {
+    const lines = text.split('\n');
+    const body = flatten(
+      lines.slice(lines.findIndex((line) => line.trim()) + 1).join('\n'),
+    );
+    return body.slice(0, limit) + (body.length > limit ? '…' : '');
+  }
   const at = flat.toLowerCase().indexOf(query.toLowerCase());
   if (at < 0) return flat.slice(0, limit) + (flat.length > limit ? '…' : '');
   const start = Math.max(0, at - 28);
