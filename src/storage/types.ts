@@ -34,6 +34,11 @@ export type ThemeChoice = 'system' | 'dark' | 'light';
 export interface Prefs {
   activeId: string | null;
   theme: ThemeChoice;
+  /**
+   * A version just updated to, whose news the footer offers for one session.
+   * The service worker sets it; the page clears it as soon as it has read it.
+   */
+  whatsNew: string | null;
 }
 
 export interface PrefsStore {

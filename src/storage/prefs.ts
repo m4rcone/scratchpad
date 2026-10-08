@@ -18,6 +18,9 @@ function sanitize(raw: unknown): Partial<Prefs> {
   }
   if (THEMES.includes(value.theme as ThemeChoice))
     prefs.theme = value.theme as ThemeChoice;
+  if (typeof value.whatsNew === 'string' || value.whatsNew === null) {
+    prefs.whatsNew = value.whatsNew as string | null;
+  }
   return prefs;
 }
 

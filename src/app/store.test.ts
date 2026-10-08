@@ -299,3 +299,24 @@ test('deleting a draft with text asks first, and can still be undone after', asy
   assert.equal(store.state.deleted, true);
   assert.ok(!store.state.drafts.some((d) => d.id === 'stored'));
 });
+
+test("an update's news is shown for one session, then forgotten on the disk", async () => {
+  const written: Partial<Prefs>[] = [];
+  const prefs: PrefsStore = {
+    async read() {
+      return { whatsNew: '1.1.0' };
+    },
+    async write(change) {
+      written.push(change);
+    },
+  };
+  const { store: d } = disk([draft({})]);
+  const store = createStore(d, prefs, 'system');
+  await store.load(() => '');
+
+  assert.equal(store.state.whatsNew, '1.1.0');
+  assert.deepEqual(written, [{ whatsNew: null }], 'cleared as soon as it is read');
+
+  store.dismissNews();
+  assert.equal(store.state.whatsNew, null);
+});

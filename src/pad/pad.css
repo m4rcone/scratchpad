@@ -282,8 +282,10 @@ button {
   color: var(--danger);
 }
 
-.footer__action[data-action='undo'] {
+.footer__action[data-action='undo'],
+.footer__action[data-action='news'] {
   color: var(--accent);
+  text-decoration: none;
 }
 
 /* A file dragged over the page: one inset line says it will be taken in. */

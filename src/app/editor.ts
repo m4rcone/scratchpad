@@ -98,8 +98,9 @@ const SUPPORT_ICON = svg(
 );
 
 /**
- * The only address the app knows. It opens in a tab of its own when the
- * writer clicks the cup; nothing is ever fetched from it.
+ * One of the two addresses the app knows, with the changelog in `footer.ts`.
+ * It opens in a tab of its own when the writer clicks the cup; nothing is
+ * ever fetched from it.
  */
 const SUPPORT_URL = 'https://ko-fi.com/m4rcone';
 

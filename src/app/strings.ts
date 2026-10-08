@@ -46,6 +46,7 @@ export const strings = {
     ? 'delete this draft? tap delete again to confirm'
     : 'delete this draft? enter confirms · esc cancels',
   undo: 'undo',
+  whatsNew: (version: string) => `what's new in ${version}`,
   deleted: isTouch ? 'draft deleted' : 'draft deleted · esc brings it back',
   deletedEmpty: 'draft deleted',
   copyCode: 'copy',

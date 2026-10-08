@@ -248,6 +248,8 @@ footerEl.addEventListener('click', (event) => {
   else if (action === 'export') exportDraft();
   else if (action === 'delete') deleteDraft();
   else if (action === 'undo') undoDelete();
+  // The link opens the changelog on its own; the footer only lets it go.
+  else if (action === 'news') store.dismissNews();
   else if (action === 'theme') toggleTheme();
 });
 

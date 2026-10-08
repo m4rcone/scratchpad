@@ -32,6 +32,8 @@ export interface State {
   pendingDelete: boolean;
   /** A draft was just deleted and can still be brought back. */
   deleted: boolean;
+  /** The version whose news the footer links to, for this session only. */
+  whatsNew: string | null;
   loaded: boolean;
 }
 
@@ -73,6 +75,7 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
     saving: false,
     pendingDelete: false,
     deleted: false,
+    whatsNew: null,
     loaded: false,
   };
 
@@ -233,6 +236,12 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       mirror();
 
       if (saved.theme) state.theme = saved.theme;
+      // Cleared on the disk as soon as it is read, so the link lasts this
+      // session and is gone the next time the scratchpad opens.
+      if (saved.whatsNew) {
+        state.whatsNew = saved.whatsNew;
+        void prefs.write({ whatsNew: null });
+      }
       state.activeId =
         (saved.activeId && state.drafts.some((draft) => draft.id === saved.activeId)
           ? saved.activeId
@@ -393,6 +402,12 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       scheduleSave(draft);
       notify();
       return true;
+    },
+
+    dismissNews() {
+      if (!state.whatsNew) return;
+      state.whatsNew = null;
+      notify();
     },
 
     setMode(mode: Mode) {
