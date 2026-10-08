@@ -19,8 +19,6 @@ English.
    security policy enforces this (`connect-src 'none'`, nothing remote in
    `img-src`); loosening it needs an issue first.
 4. Markdown is the editing format.
-5. A new feature only lands by cutting another one. When in doubt, do not
-   implement: open an issue with the proposal.
 
 ## Stack
 

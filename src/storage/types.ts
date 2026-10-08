@@ -14,6 +14,12 @@ export interface Draft {
   schemaVersion: number;
   /** Caret offset, so reopening a tab lands where the writing stopped. */
   caret?: number;
+  /**
+   * How far down the reading view was, as a fraction of what scrolls, so a
+   * long answer reopens where the reading stopped. A fraction rather than
+   * pixels, because the same draft is taller in a narrower window.
+   */
+  scroll?: number;
 }
 
 export interface DraftStore {
@@ -28,6 +34,11 @@ export type ThemeChoice = 'system' | 'dark' | 'light';
 export interface Prefs {
   activeId: string | null;
   theme: ThemeChoice;
+  /**
+   * A version just updated to, whose news the footer offers for one session.
+   * The service worker sets it; the page clears it as soon as it has read it.
+   */
+  whatsNew: string | null;
 }
 
 export interface PrefsStore {

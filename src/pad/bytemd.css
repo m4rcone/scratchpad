@@ -168,6 +168,63 @@
   padding-top: 48px;
 }
 
+/*
+ * AI answers bring code, tables and diagrams that the prose measure squeezes
+ * into a sideways scroll, on a screen with room to spare. So in both views
+ * that show the preview, the body takes the pane's full width, prose keeps its
+ * column through its margins, and those three start on the column's left edge
+ * and grow rightwards as far as their content asks, up to the pane's right
+ * gutter. Every block keeps the same left edge, which is the line the eye
+ * returns to; one narrower than the column is held at the column's width.
+ *
+ * Reading centres the column in the pane. Split keeps it against the divider:
+ * that pane is already half the screen, and centring would only open a gap
+ * beside the source.
+ *
+ * `--inset` is the margin before the column and `--trail` the one after it.
+ * They stay unregistered on purpose: their `100%` has to resolve on each
+ * child, against the body's width.
+ *
+ * `--column` is the width the body's content had at reading measure: the same
+ * `max-width` as below, less its padding. It is registered as a length so it
+ * is resolved once, on the body: left as a plain custom property, its `ch`
+ * would be re-measured in each child's own font, and a heading's larger one
+ * made its column wider than the pane.
+ */
+@property --column {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+.editor:is([data-mode='read'], [data-mode='split']) .bytemd-preview .markdown-body {
+  --column: calc(var(--measure) + 8ch - 2 * var(--gutter));
+  max-width: none;
+}
+
+.editor[data-mode='read'] .bytemd-preview .markdown-body {
+  --inset: max(0px, (100% - var(--column)) / 2);
+  --trail: var(--inset);
+}
+
+.editor[data-mode='split'] .bytemd-preview .markdown-body {
+  --inset: 0px;
+  --trail: max(0px, 100% - var(--column));
+}
+
+.editor:is([data-mode='read'], [data-mode='split']) .markdown-body > * {
+  margin-inline: var(--inset) var(--trail);
+}
+
+.editor:is([data-mode='read'], [data-mode='split'])
+  .markdown-body
+  > :is(.code-block, table, .bytemd-mermaid) {
+  width: fit-content;
+  min-width: min(100%, var(--column));
+  max-width: calc(100% - var(--inset));
+  margin-inline: var(--inset) 0;
+}
+
 /* ---------- the writing surface ---------- */
 
 .bytemd .CodeMirror {
@@ -180,16 +237,14 @@
   tab-size: 2;
 }
 
+/* The source takes its whole pane, in split as in write: it is markdown being
+   edited, and a table row or a code line wrapped at a reading measure is
+   harder to edit than a long line is to read. ByteMD's own stylesheet caps it
+   at 800px, so the cap is lifted here rather than left out. */
 .bytemd-editor .CodeMirror .CodeMirror-lines {
-  max-width: var(--measure);
+  max-width: none;
   margin: 0;
   padding: 32px 0 40px;
-}
-
-/* The measure is what keeps the two columns readable beside each other. Write
-   only has no second column to balance against, so the text takes the pane. */
-.editor[data-mode='write'] .bytemd-editor .CodeMirror .CodeMirror-lines {
-  max-width: none;
 }
 
 .bytemd-editor .CodeMirror pre.CodeMirror-line,
@@ -447,7 +502,6 @@
 }
 
 .markdown-body pre {
-  background: var(--code-bg);
   border: 1px solid var(--hair);
   border-radius: 4px;
   padding: 12px 14px;
@@ -459,12 +513,84 @@
   line-height: 1.55;
 }
 
+/*
+ * A code block or a table wider than its box shows a soft shadow on the side
+ * that still hides content. CSS alone, so nothing has to be measured again on
+ * every render: two shadows are pinned to the box's edges (`scroll`), and two
+ * covers in the box's own colour ride with the content (`local`). At either
+ * end of the scroll a cover sits over its shadow; anywhere short of it, the
+ * cover has moved away and the shadow shows. A block that fits shows none.
+ *
+ * `--cover` is the colour the block is painted in. In a table the header row
+ * has a fill of its own, which hides the shadow along that row only.
+ */
+.markdown-body pre,
+.markdown-body table {
+  --cover: var(--code-bg);
+  background:
+    linear-gradient(to right, var(--cover) 30%, transparent) left / 40px 100% no-repeat
+      local,
+    linear-gradient(to left, var(--cover) 30%, transparent) right / 40px 100% no-repeat
+      local,
+    radial-gradient(farthest-side at 0 50%, var(--scroll-shadow), transparent) left / 14px
+      100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-shadow), transparent) right /
+      14px 100% no-repeat scroll,
+    var(--cover);
+}
+
+.markdown-body table {
+  --cover: var(--bg);
+}
+
 .markdown-body pre code {
   color: var(--ink);
   font-size: inherit;
   background: none;
   border-radius: 0;
   padding: 0;
+}
+
+/* Every code block is wrapped by `editor.ts` to carry a copy button over its
+   top-right corner. The button shows on hover or keyboard focus, and stays
+   visible where there is no hover to reveal it. */
+.markdown-body .code-block {
+  position: relative;
+  margin: 0 0 1em;
+}
+
+.markdown-body .code-block > pre {
+  margin: 0;
+}
+
+.markdown-body .code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  font-family: var(--sans);
+  font-size: var(--ui-size);
+  color: var(--muted);
+  background: var(--code-bg);
+  border: 1px solid var(--hair);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.markdown-body .code-block:hover .code-copy,
+.markdown-body .code-copy:focus-visible {
+  opacity: 1;
+}
+
+.markdown-body .code-copy:hover {
+  color: var(--ink);
+}
+
+@media (hover: none) {
+  .markdown-body .code-copy {
+    opacity: 1;
+  }
 }
 
 /*
@@ -500,6 +626,9 @@
   color: var(--ink);
   font-weight: 600;
   background: var(--code-bg);
+  /* A header broken mid-label ("col / e") reads worse than a table that
+     scrolls, and the edge shadow says when it does. Cells still wrap. */
+  white-space: nowrap;
 }
 
 /* KaTeX inherits the page colour rather than KaTeX's own near-black. */

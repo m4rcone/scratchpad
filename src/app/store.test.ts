@@ -213,3 +213,110 @@ test('each view button switches back to writing, or straight to its view', async
   store.toggleMode('read');
   assert.equal(store.state.mode, 'write');
 });
+
+test('the footer can say "saved" only once the text has landed', async () => {
+  const { store: d } = disk([draft({})]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  store.moveCaret(3);
+  assert.equal(store.state.saving, false, 'a caret move is not unsaved text');
+
+  store.write('something new', 13);
+  assert.equal(store.state.saving, true);
+  await store.flush();
+  assert.equal(store.state.saving, false);
+});
+
+test('a deleted draft comes back where it was, and the disk gets it again', async () => {
+  const removed: string[] = [];
+  const { store: d, written } = disk([
+    draft({ id: 'newer', text: 'newer', updatedAt: 2 }),
+    draft({ id: 'older', text: 'older', updatedAt: 1 }),
+  ]);
+  d.remove = async (id) => void removed.push(id);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  await store.remove();
+  assert.deepEqual(removed, ['newer']);
+  assert.equal(store.state.activeId, 'older');
+  assert.equal(store.state.deleted, true);
+
+  assert.equal(store.undoRemove(), true);
+  assert.equal(store.state.activeId, 'newer');
+  assert.deepEqual(
+    store.state.drafts.map((d) => d.id),
+    ['newer', 'older'],
+  );
+  assert.equal(store.state.deleted, false);
+  await store.flush();
+  assert.ok(written.some((entry) => entry.id === 'newer'));
+  assert.equal(store.undoRemove(), false, 'and only once');
+});
+
+test('undoing the only draft drops the empty one that replaced it', async () => {
+  const { store: d } = disk([draft({ text: 'the only one' })]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  await store.remove();
+  assert.equal(store.state.drafts.length, 1);
+  assert.notEqual(store.state.activeId, 'stored');
+
+  store.undoRemove();
+  assert.deepEqual(
+    store.state.drafts.map((d) => d.id),
+    ['stored'],
+  );
+});
+
+test('an empty draft is deleted without an offer to bring it back', async () => {
+  const { store: d } = disk([draft({ text: '  \n' })]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  await store.remove();
+  assert.equal(store.state.deleted, false);
+  assert.equal(store.undoRemove(), false);
+});
+
+test('deleting a draft with text asks first, and can still be undone after', async () => {
+  const { store: d } = disk([draft({ text: 'worth keeping' })]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  assert.equal(store.requestDelete(), 'confirm');
+  assert.equal(store.state.pendingDelete, true);
+  assert.equal(store.state.drafts[0]?.id, 'stored', 'nothing is gone yet');
+
+  store.cancelDelete();
+  assert.equal(store.state.pendingDelete, false);
+
+  store.requestDelete();
+  assert.equal(store.requestDelete(), 'deleted');
+  assert.equal(store.state.pendingDelete, false);
+  assert.equal(store.state.deleted, true);
+  assert.ok(!store.state.drafts.some((d) => d.id === 'stored'));
+});
+
+test("an update's news is shown for one session, then forgotten on the disk", async () => {
+  const written: Partial<Prefs>[] = [];
+  const prefs: PrefsStore = {
+    async read() {
+      return { whatsNew: '1.1.0' };
+    },
+    async write(change) {
+      written.push(change);
+    },
+  };
+  const { store: d } = disk([draft({})]);
+  const store = createStore(d, prefs, 'system');
+  await store.load(() => '');
+
+  assert.equal(store.state.whatsNew, '1.1.0');
+  assert.deepEqual(written, [{ whatsNew: null }], 'cleared as soon as it is read');
+
+  store.dismissNews();
+  assert.equal(store.state.whatsNew, null);
+});

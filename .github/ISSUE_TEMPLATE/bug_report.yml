@@ -29,7 +29,7 @@ body:
     attributes:
       label: Extension version
       description: From `chrome://extensions`, or the commit you built from.
-      placeholder: '1.0.0'
+      placeholder: '1.1.0'
     validations:
       required: true
   - type: input

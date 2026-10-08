@@ -16,7 +16,7 @@ import { createRail } from '../app/rail.ts';
 import { createSearch, searchResults } from '../app/search.ts';
 import { createStore } from '../app/store.ts';
 import type { State } from '../app/store.ts';
-import { slugOf, titleOf } from '../app/model.ts';
+import { isTextFile, slugOf, titleOf } from '../app/model.ts';
 import { isMod } from '../app/platform.ts';
 import { strings } from '../app/strings.ts';
 import { applyTheme, bootTheme, effectiveTheme, systemTheme } from '../app/theme.ts';
@@ -31,6 +31,7 @@ const railEl = $('rail');
 const footerEl = $('footer');
 const searchEl = $('search');
 const editorEl = $('editor');
+const shellEl = document.querySelector<HTMLElement>('.shell')!;
 
 // A pinned theme is known synchronously, so the first frame is already right —
 // and so is the palette mermaid bakes into the diagrams it draws.
@@ -56,6 +57,7 @@ let searchWasOpen = false;
 
 function paint(state: State): void {
   const active = store.active();
+  const switched = !!active && active.id !== lastRenderedId;
 
   // Only reset the document when the draft itself changed: rewriting it on
   // every keystroke would fight the caret and wipe CodeMirror's undo history.
@@ -84,9 +86,15 @@ function paint(state: State): void {
   }
   searchWasOpen = state.searchOpen;
 
-  if (state.mode !== lastMode) {
+  const modeChanged = state.mode !== lastMode;
+  if (modeChanged) {
     lastMode = state.mode;
     editor.setMode(state.mode);
+  }
+  // Arriving at the reading view, or at another draft while in it, picks the
+  // reading up where it was left.
+  if (active && state.mode === 'read' && (modeChanged || switched)) {
+    editor.setReadScroll(active.scroll ?? 0);
   }
 
   applyTheme(state.theme);
@@ -112,6 +120,7 @@ editor.onCaret((caret) => store.moveCaret(caret));
 // Coming back to the text means the delete was not meant: enter must type a
 // newline again, not confirm.
 editor.onFocus(() => store.cancelDelete());
+editor.onReadScroll((fraction) => store.moveScroll(fraction));
 editor.onToggleView(toggleMode);
 
 // ---------- actions ----------
@@ -141,10 +150,35 @@ function exportDraft(): void {
 
 function deleteDraft(): void {
   if (store.requestDelete() === 'deleted') {
-    store.flash(strings.deleted);
-    lastRenderedId = null;
+    // An empty draft goes without an undo offer, so it gets a plain notice.
+    if (!store.state.deleted) store.flash(strings.deletedEmpty);
     editor.focus();
   }
+}
+
+function undoDelete(): void {
+  if (store.undoRemove()) editor.focus();
+}
+
+/**
+ * Each dropped `.md` or `.txt` becomes a draft of its own; the last one is left
+ * open. Nothing else is taken, and the footer says so rather than leaving the
+ * writer to wonder why the drop did nothing.
+ */
+async function openFiles(files: File[]): Promise<void> {
+  const accepted = files.filter((file) => isTextFile(file.name));
+  if (!accepted.length) {
+    store.flash(strings.dropOnly);
+    return;
+  }
+  // A drop in the first instants must not land in drafts the load then replaces.
+  await booted;
+  const texts = await Promise.all(accepted.map((file) => file.text()));
+  for (const text of texts) store.create(text.replace(/\r\n?/g, '\n'));
+  editor.focus();
+  store.flash(
+    accepted.length < files.length ? strings.dropOnly : strings.dropped(texts.length),
+  );
 }
 
 /**
@@ -213,6 +247,9 @@ footerEl.addEventListener('click', (event) => {
   if (action === 'copy') void copyAll();
   else if (action === 'export') exportDraft();
   else if (action === 'delete') deleteDraft();
+  else if (action === 'undo') undoDelete();
+  // The link opens the changelog on its own; the footer only lets it go.
+  else if (action === 'news') store.dismissNews();
   else if (action === 'theme') toggleTheme();
 });
 
@@ -317,11 +354,70 @@ window.addEventListener('keydown', (event) => {
     return;
   }
 
+  if (state.deleted && event.key === 'Escape') {
+    event.preventDefault();
+    undoDelete();
+    return;
+  }
+
   if (event.key === 'Escape' && state.mode !== 'write') {
     event.preventDefault();
     backToWriting();
   }
 });
+
+/**
+ * Files dropped anywhere on the page. Listened to in the capture phase, ahead
+ * of CodeMirror: left to itself it pastes any dropped file's bytes into the
+ * open draft — an image included — and outside the editor Chrome would leave
+ * the scratchpad to display the file. A drag that carries no files (text moved
+ * inside the editor) is none of this code's business.
+ */
+const carriesFiles = (event: DragEvent) =>
+  event.dataTransfer?.types.includes('Files') ?? false;
+// `dragleave` fires on every child the drag crosses, so the cue counts depth.
+let dragDepth = 0;
+
+window.addEventListener(
+  'dragenter',
+  (event) => {
+    if (!carriesFiles(event)) return;
+    dragDepth += 1;
+    shellEl.dataset.dropping = '';
+  },
+  true,
+);
+window.addEventListener(
+  'dragleave',
+  (event) => {
+    if (!carriesFiles(event)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) delete shellEl.dataset.dropping;
+  },
+  true,
+);
+window.addEventListener(
+  'dragover',
+  (event) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer!.dropEffect = 'copy';
+  },
+  true,
+);
+window.addEventListener(
+  'drop',
+  (event) => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth = 0;
+    delete shellEl.dataset.dropping;
+    void openFiles([...(event.dataTransfer?.files ?? [])]);
+  },
+  true,
+);
 
 // Closing the tab right after a keystroke must not cost that keystroke.
 document.addEventListener('visibilitychange', () => {
@@ -334,7 +430,7 @@ window.addEventListener('pagehide', () => store.flushSync());
 
 // ---------- boot ----------
 
-void store
+const booted = store
   .load(() => editor.getText())
   .then((active) => {
     if (active) {

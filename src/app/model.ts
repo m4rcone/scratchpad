@@ -118,6 +118,16 @@ export function groupByDay(drafts: Draft[], now = Date.now()): DraftGroup[] {
   return buckets.filter((group) => group.drafts.length > 0);
 }
 
+/**
+ * Whether a file dropped on the page becomes a draft. The extension decides,
+ * not the type: Chrome reports `.md` as `text/markdown` on some systems and as
+ * nothing at all on others, so a known name is enough and a text type without
+ * one (a `.log`, say) is not let in on the strength of its type alone.
+ */
+export function isTextFile(name: string): boolean {
+  return /\.(md|markdown|txt)$/i.test(name);
+}
+
 export function matches(draft: Draft, query: string): boolean {
   return draft.text.toLowerCase().includes(query.toLowerCase());
 }

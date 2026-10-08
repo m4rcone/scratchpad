@@ -9,6 +9,9 @@
  * The keyboard command (`_execute_action` in the manifest) lands here too: with
  * no popup declared, Chrome reports it as a click on the icon.
  */
+import { isFeatureRelease } from './app/release.ts';
+import { prefsStore } from './storage/prefs.ts';
+
 const PAGE = chrome.runtime.getURL('pad/index.html');
 
 /** The page's own URL, whatever fragment or query it picked up since. */
@@ -36,7 +39,14 @@ async function openPad(): Promise<void> {
 chrome.action.onClicked.addListener(() => void openPad());
 
 // Chrome tucks a new extension into the puzzle-piece menu, so a first install
-// would otherwise leave nothing on screen to click. Updates stay silent.
-chrome.runtime.onInstalled.addListener(({ reason }) => {
+// would otherwise leave nothing on screen to click. An update opens nothing:
+// a new minor or major only leaves a note for the page, which shows a link to
+// the changelog in its footer the next time it opens.
+chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   if (reason === chrome.runtime.OnInstalledReason.INSTALL) void openPad();
+  if (reason !== chrome.runtime.OnInstalledReason.UPDATE) return;
+  const current = chrome.runtime.getManifest().version;
+  if (isFeatureRelease(previousVersion, current)) {
+    void prefsStore().write({ whatsNew: current });
+  }
 });
