@@ -124,6 +124,8 @@ function addCopyButtons(body: HTMLElement): void {
     button.type = 'button';
     button.className = 'code-copy';
     button.textContent = strings.copyCode;
+    // Every block's button reads "copy"; a screen reader needs to know what.
+    button.setAttribute('aria-label', strings.copyCodeLabel);
     pre.replaceWith(block);
     block.append(pre, button);
   }

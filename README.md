@@ -9,7 +9,7 @@ network, your data never leaves your machine.
 
 ![Scratchpad in split view: the markdown source on the left, the rendered preview on the right](.github/screenshot.png)
 
-Version **1.0.0**.
+Version **1.1.0**.
 
 ## Principles
 

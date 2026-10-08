@@ -9,3 +9,5 @@ docs/
 # packed.
 scratchpad.zip
 scratchpad-v*.zip
+# A packed build unzipped in place, to load unpacked and try.
+/scratchpad/

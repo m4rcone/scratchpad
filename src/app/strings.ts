@@ -49,6 +49,7 @@ export const strings = {
   deleted: isTouch ? 'draft deleted' : 'draft deleted · esc brings it back',
   deletedEmpty: 'draft deleted',
   copyCode: 'copy',
+  copyCodeLabel: 'copy code',
   codeCopied: 'copied',
   dropOnly: 'only .md and .txt files open as drafts',
   dropped: (count: number) =>

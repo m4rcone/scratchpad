@@ -626,6 +626,9 @@
   color: var(--ink);
   font-weight: 600;
   background: var(--code-bg);
+  /* A header broken mid-label ("col / e") reads worse than a table that
+     scrolls, and the edge shadow says when it does. Cells still wrap. */
+  white-space: nowrap;
 }
 
 /* KaTeX inherits the page colour rather than KaTeX's own near-black. */
