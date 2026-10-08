@@ -31,6 +31,7 @@ export const strings = {
   searchEmpty: 'nothing matches',
   words: (count: number) => `${count} ${count === 1 ? 'word' : 'words'}`,
   saved: isTouch ? 'saved' : `saved ·${hint('/')} splits the preview`,
+  saving: 'saving…',
   saveFailed: 'could not save · still trying',
   splitting: isTouch ? 'split view' : `split view ·${hint('/')} closes it`,
   reading: isTouch ? 'reading' : `reading ·${hint('P', true)} or esc returns`,
@@ -44,5 +45,12 @@ export const strings = {
   deleteConfirm: isTouch
     ? 'delete this draft? tap delete again to confirm'
     : 'delete this draft? enter confirms · esc cancels',
-  deleted: 'draft deleted',
+  undo: 'undo',
+  deleted: isTouch ? 'draft deleted' : 'draft deleted · esc brings it back',
+  deletedEmpty: 'draft deleted',
+  copyCode: 'copy',
+  codeCopied: 'copied',
+  dropOnly: 'only .md and .txt files open as drafts',
+  dropped: (count: number) =>
+    count === 1 ? 'opened as a draft' : `opened as ${count} drafts`,
 };

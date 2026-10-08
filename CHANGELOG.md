@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Added
+
+- A copy button on every code block in the preview.
+- A soft shadow on the side of a code block or table that still scrolls.
+- Dropping `.md` or `.txt` files on the page opens each one as a draft.
+- The reading view reopens each draft where the reading stopped.
+
+### Changed
+
+- The footer says "saved" only once the text is on disk, and "saving…" while
+  it is not.
+- The reading and split views let code blocks, tables and diagrams grow
+  rightwards past the prose column, up to the pane's edge, keeping the
+  column's left edge.
+- In split view the source takes its whole pane, as it already did in write
+  view, instead of wrapping at the reading measure.
+- A confirmed delete can be undone from the footer, or with `esc`, for a few
+  seconds.
+
 ## [1.0.0] — 2026-09-27
 
 First release.

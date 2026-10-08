@@ -56,6 +56,10 @@ export interface Editor {
   onFocus(handler: () => void): void;
   /** The view buttons on ByteMD's toolbar, which the app's mode answers to. */
   onToggleView(handler: (mode: Exclude<Mode, 'write'>) => void): void;
+  /** Scrolls the reading view to a fraction of its height; see `Draft.scroll`. */
+  setReadScroll(fraction: number): void;
+  /** The writer scrolling the reading view, as a fraction of its height. */
+  onReadScroll(handler: (fraction: number) => void): void;
 }
 
 /**
@@ -99,6 +103,32 @@ const SUPPORT_ICON = svg(
  */
 const SUPPORT_URL = 'https://ko-fi.com/m4rcone';
 
+/**
+ * Gives every code block in the preview a copy button. The block is wrapped
+ * rather than the button put inside the `pre`, which scrolls sideways and
+ * would carry the button away with a long line. The wrapper takes the `pre`'s
+ * place one for one, so ByteMD's split-view scroll sync, which pairs the
+ * preview's top-level elements with the markdown's, still counts the same.
+ *
+ * ByteMD calls this after every update, and an update does not always rewrite
+ * the HTML, so a block already wrapped is left alone. Mermaid's blocks are
+ * skipped: its own effect is about to replace them with a diagram.
+ */
+function addCopyButtons(body: HTMLElement): void {
+  for (const pre of body.querySelectorAll<HTMLElement>('pre')) {
+    if (pre.parentElement?.classList.contains('code-block')) continue;
+    if (pre.querySelector('code.language-mermaid')) continue;
+    const block = document.createElement('div');
+    block.className = 'code-block';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'code-copy';
+    button.textContent = strings.copyCode;
+    pre.replaceWith(block);
+    block.append(pre, button);
+  }
+}
+
 export function createEditor(
   host: HTMLElement,
   mode: Mode,
@@ -110,6 +140,14 @@ export function createEditor(
   const viewHandlers: ((mode: Exclude<Mode, 'write'>) => void)[] = [];
   const toggleView = (mode: Exclude<Mode, 'write'>) =>
     viewHandlers.forEach((handler) => handler(mode));
+  const scrollHandlers: ((fraction: number) => void)[] = [];
+  /**
+   * True from the moment a reading position is asked for until it has been
+   * applied. Entering the view re-renders the preview, and the scroll events
+   * that churn sets off would otherwise be saved over the position being
+   * restored.
+   */
+  let restoring = false;
 
   let cm: CodeMirrorEditor | null = null;
   let text = '';
@@ -168,6 +206,9 @@ export function createEditor(
         },
       },
     ].reverse(),
+    viewerEffect({ markdownBody }) {
+      addCopyButtons(markdownBody);
+    },
     editorEffect({ editor }) {
       if (cm === editor) return;
       cm = editor;
@@ -232,6 +273,20 @@ export function createEditor(
    * writing a fragment into the page URL.
    */
   host.addEventListener('click', (event) => {
+    const copy = (event.target as HTMLElement).closest<HTMLElement>('.code-copy');
+    if (copy) {
+      const code = copy.parentElement?.querySelector('pre')?.textContent ?? '';
+      void navigator.clipboard.writeText(code).then(
+        () => {
+          copy.textContent = strings.codeCopied;
+          setTimeout(() => (copy.textContent = strings.copyCode), 1500);
+        },
+        () => {
+          /* clipboard denied: the code is still there to select by hand */
+        },
+      );
+      return;
+    }
     const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>(
       '.bytemd-preview a[href]',
     );
@@ -257,6 +312,24 @@ export function createEditor(
       preview?.querySelector(`[id="user-content-${CSS.escape(id)}"]`);
     target?.scrollIntoView({ block: 'start' });
   });
+
+  const preview = () => host.querySelector<HTMLElement>('.bytemd-preview');
+  const scrollable = (pane: HTMLElement) => pane.scrollHeight - pane.clientHeight;
+
+  // `scroll` does not bubble, so the pane is listened to through the capture
+  // phase: ByteMD may rebuild it, and the host is the one element that stays.
+  host.addEventListener(
+    'scroll',
+    (event) => {
+      const pane = event.target as HTMLElement;
+      if (restoring || host.dataset.mode !== 'read') return;
+      if (!pane.classList?.contains('bytemd-preview')) return;
+      const range = scrollable(pane);
+      const fraction = range > 0 ? Math.round((pane.scrollTop / range) * 1e4) / 1e4 : 0;
+      for (const handler of scrollHandlers) handler(fraction);
+    },
+    { capture: true },
+  );
 
   return {
     setText(next, caret) {
@@ -318,5 +391,16 @@ export function createEditor(
     onCaret: (handler) => caretHandlers.push(handler),
     onFocus: (handler) => focusHandlers.push(handler),
     onToggleView: (handler) => viewHandlers.push(handler),
+    // Two frames: the first lets the re-render `setMode` asked for land and
+    // be laid out, the second lets the scroll it causes be swallowed.
+    setReadScroll(fraction) {
+      restoring = true;
+      requestAnimationFrame(() => {
+        const pane = preview();
+        if (pane) pane.scrollTop = fraction * scrollable(pane);
+        requestAnimationFrame(() => (restoring = false));
+      });
+    },
+    onReadScroll: (handler) => scrollHandlers.push(handler),
   };
 }

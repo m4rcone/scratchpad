@@ -15,6 +15,9 @@
   --code-bg: #16161a;
   --selection: rgba(134, 169, 234, 0.14);
   --danger: #f0736c;
+  /* The edge of a block that scrolls sideways. Black is lost on the dark
+     background, so dark gets a faint light edge instead. */
+  --scroll-shadow: rgba(255, 255, 255, 0.2);
 
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -44,6 +47,7 @@
     --code-bg: #f2f0ea;
     --selection: rgba(47, 95, 190, 0.1);
     --danger: #c9342c;
+    --scroll-shadow: rgba(0, 0, 0, 0.16);
     color-scheme: light;
   }
 }
@@ -59,6 +63,7 @@
   --code-bg: #f2f0ea;
   --selection: rgba(47, 95, 190, 0.1);
   --danger: #c9342c;
+  --scroll-shadow: rgba(0, 0, 0, 0.16);
   color-scheme: light;
 }
 
@@ -271,9 +276,22 @@ button {
 }
 
 /* Delete is the one action that loses something, so it warns in red — on
-   hover, and while it waits for the confirming second press. */
+   hover, and while it waits for the confirming second press. For the few
+   seconds it can be taken back, it reads "undo" in the accent instead. */
 .footer__action.is-armed {
   color: var(--danger);
+}
+
+.footer__action[data-action='undo'] {
+  color: var(--accent);
+}
+
+/* A file dragged over the page: one inset line says it will be taken in. */
+.shell[data-dropping] {
+  /* An outline, not an inset shadow: it is painted over the panes' own
+     backgrounds instead of under them. */
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* ---------- search ---------- */

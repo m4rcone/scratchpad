@@ -23,11 +23,21 @@ export interface State {
   query: string;
   cursor: number;
   status: string;
+  /**
+   * Whether typed text is still waiting for the disk. The footer says "saved"
+   * only once it is false, so the word means what it says.
+   */
+  saving: boolean;
+  /** The delete button was pressed once and waits for a second press. */
   pendingDelete: boolean;
+  /** A draft was just deleted and can still be brought back. */
+  deleted: boolean;
   loaded: boolean;
 }
 
 const SAVE_DEBOUNCE = 250;
+/** How long a deleted draft can be brought back from the footer. */
+const UNDO_WINDOW = 6000;
 /**
  * Synchronous mirror of the drafts being written. IndexedDB writes are async and
  * a tab that closes right after a keystroke may cut one short; localStorage is
@@ -60,7 +70,9 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
     query: '',
     cursor: 0,
     status: '',
+    saving: false,
     pendingDelete: false,
+    deleted: false,
     loaded: false,
   };
 
@@ -75,6 +87,12 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
   const dirty = new Map<string, Pending>();
   let revision = 0;
   let statusTimer: number | undefined;
+  /**
+   * The draft the last delete took, and the empty one created in its place
+   * when it was the only draft — which undoing makes pointless again.
+   */
+  let undo: { draft: Draft; replacement: string | null } | null = null;
+  let undoTimer: number | undefined;
 
   const notify = () => listeners.forEach((listener) => listener(state));
 
@@ -84,6 +102,25 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
 
   function sort() {
     state.drafts.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  /**
+   * Text waiting for the disk, not a caret or a scroll position: those save
+   * too, but an arrow key that flipped the footer to "saving" would be noise.
+   * Returns whether it changed, so the async path knows to repaint.
+   */
+  function syncSaving(): boolean {
+    const saving = [...dirty.values()].some((entry) => entry.mirrored);
+    if (saving === state.saving) return false;
+    state.saving = saving;
+    return true;
+  }
+
+  function forgetUndo() {
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = undefined;
+    undo = null;
+    state.deleted = false;
   }
 
   /**
@@ -139,6 +176,7 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       if (dirty.get(id)?.revision === entry.revision) dirty.delete(id);
     }
     mirror();
+    if (syncSaving()) notify();
     if (failed) api.flash(strings.saveFailed);
   }
 
@@ -149,6 +187,7 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       mirrored: textChanged || (dirty.get(draft.id)?.mirrored ?? false),
     });
     if (textChanged) mirror();
+    syncSaving();
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => void flush(), SAVE_DEBOUNCE);
   }
@@ -237,6 +276,14 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       scheduleSave(draft, false);
     },
 
+    /** Where the reading view stands, as a fraction; see `Draft.scroll`. */
+    moveScroll(scroll: number) {
+      const draft = active();
+      if (!draft || draft.scroll === scroll) return;
+      draft.scroll = scroll;
+      scheduleSave(draft, false);
+    },
+
     open(id: string) {
       // Opening the draft that is already active still means "take me to it":
       // it closes search and leaves preview. Returning early skipped that.
@@ -251,8 +298,13 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       notify();
     },
 
-    create() {
-      const draft = newDraft();
+    /**
+     * A new draft, empty or holding a dropped file. A file opens at its top:
+     * the caret is where the reading starts, not past the last line.
+     */
+    create(text = '') {
+      const draft = newDraft(text);
+      draft.caret = 0;
       state.drafts.unshift(draft);
       state.activeId = draft.id;
       state.mode = 'write';
@@ -274,7 +326,7 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
         notify();
         return 'confirm';
       }
-      void api.remove(draft.id);
+      void api.remove();
       return 'deleted';
     },
 
@@ -284,20 +336,63 @@ export function createStore(drafts: DraftStore, prefs: PrefsStore, theme: ThemeC
       notify();
     },
 
-    async remove(id: string) {
-      state.drafts = state.drafts.filter((draft) => draft.id !== id);
+    /**
+     * Deletes the active draft. Once confirmed it goes at once, and the footer
+     * still offers it back for a few seconds. An empty draft has nothing to
+     * bring back, so it goes without the offer.
+     */
+    async remove() {
+      const draft = active();
+      if (!draft) return;
+      forgetUndo();
       state.pendingDelete = false;
-      if (dirty.delete(id)) mirror();
+      state.drafts = state.drafts.filter((other) => other.id !== draft.id);
+      if (dirty.delete(draft.id)) mirror();
+      syncSaving();
+      let replacement: string | null = null;
       if (!state.drafts.length) {
-        const draft = newDraft();
-        state.drafts.push(draft);
-        scheduleSave(draft);
+        const fresh = newDraft();
+        state.drafts.push(fresh);
+        replacement = fresh.id;
+        scheduleSave(fresh);
+      }
+      if (draft.text.trim()) {
+        undo = { draft, replacement };
+        state.deleted = true;
+        undoTimer = window.setTimeout(() => {
+          forgetUndo();
+          notify();
+        }, UNDO_WINDOW);
       }
       // The next draft is on screen before the disk is asked to forget this one.
       state.activeId = state.drafts[0]?.id ?? null;
       void prefs.write({ activeId: state.activeId });
       notify();
-      await drafts.remove(id);
+      await drafts.remove(draft.id);
+    },
+
+    /**
+     * Brings the last deleted draft back where it was in the rail. The disk
+     * already forgot it, so it is written again; the empty draft that stood
+     * in for it goes, unless something was typed there in the meantime.
+     */
+    undoRemove(): boolean {
+      if (!undo) return false;
+      const { draft, replacement } = undo;
+      forgetUndo();
+      const stand = state.drafts.find((other) => other.id === replacement);
+      if (stand && !stand.text.trim()) {
+        state.drafts = state.drafts.filter((other) => other !== stand);
+        if (dirty.delete(stand.id)) mirror();
+        void drafts.remove(stand.id);
+      }
+      state.drafts.push(draft);
+      sort();
+      state.activeId = draft.id;
+      void prefs.write({ activeId: draft.id });
+      scheduleSave(draft);
+      notify();
+      return true;
     },
 
     setMode(mode: Mode) {

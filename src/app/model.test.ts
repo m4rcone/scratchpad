@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupByDay, slugOf, snippetOf, titleOf, wordCount } from './model.ts';
+import {
+  groupByDay,
+  isTextFile,
+  slugOf,
+  snippetOf,
+  titleOf,
+  wordCount,
+} from './model.ts';
 import type { Draft } from '../storage/types.ts';
 
 const draft = (over: Partial<Draft>): Draft => ({
@@ -83,4 +90,14 @@ test('grouping drops empty buckets', () => {
     groups.map((g) => g.label),
     ['today', 'earlier'],
   );
+});
+
+test('only markdown and plain text files are taken in a drop', () => {
+  assert.ok(isTextFile('notes.md'));
+  assert.ok(isTextFile('NOTES.MD'));
+  assert.ok(isTextFile('spec.markdown'));
+  assert.ok(isTextFile('log.txt'));
+  assert.ok(!isTextFile('photo.png'));
+  assert.ok(!isTextFile('md'));
+  assert.ok(!isTextFile('archive.md.zip'));
 });

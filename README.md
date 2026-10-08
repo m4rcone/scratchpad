@@ -26,11 +26,16 @@ Version **1.0.0**.
   last keystroke.
 - Highlights markdown as you type and keeps the markers visible, dimmed.
 - Three views: writing, writing with the preview beside it, and the preview
-  alone for reading.
+  alone for reading. Reading keeps prose at a comfortable measure and lets wide
+  code, tables and diagrams use the rest of the screen; each draft reopens
+  there where the reading stopped.
 - The preview renders GitHub-flavoured markdown, code highlighting, LaTeX
   maths, mermaid diagrams and `:emoji:`. Embedded HTML is sanitized.
 - Multiple drafts, titled by their first line, with full-text search.
-- Copy a draft or export it as `.md`.
+- Copy a draft or export it as `.md`; copy a single code block from the
+  preview. Drop a `.md` or `.txt` file on the page to open it as a draft.
+- Deleting asks for confirmation, and can still be undone for a few seconds
+  from the footer.
 - Light and dark themes that follow the system.
 
 Remote images in a draft are not loaded: the extension makes no network
@@ -49,7 +54,7 @@ On Windows and Linux, `⌘` is `Ctrl` and `⌥` is `Alt`.
 | `⌘⇧P`    | reading view                                             |
 | `⌘⇧A`    | copy the whole draft                                     |
 | `⌘S`     | export as `.md`                                          |
-| `esc`    | back to writing; close the rail; cancel a pending delete |
+| `esc`    | back to writing; close the rail; cancel or undo a delete |
 
 ¹ Change it at `chrome://extensions/shortcuts`. Formatting shortcuts (`⌘B`,
 `⌘I`, `⌘K`…) are listed under `?` on the toolbar.

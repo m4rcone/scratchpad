@@ -2,6 +2,9 @@
  * Status on the left, the four actions on the right. The buttons are built
  * once; every paint only touches the text that changed, so hovering a button
  * survives the keystroke that re-counts the words.
+ *
+ * Delete asks for a second press. Once it has gone through, the button turns
+ * into "undo" for a few seconds: the pointer that deleted is already on it.
  */
 import type { State } from './store.ts';
 import { wordCount } from './model.ts';
@@ -31,8 +34,13 @@ export function createFooter(root: HTMLElement): (state: State, text: string) =>
   return (state, text) => {
     status.textContent = state.pendingDelete
       ? strings.deleteConfirm
-      : state.status || `${strings.words(wordCount(text))} · ${MODE_STATUS[state.mode]}`;
+      : state.status ||
+        (state.deleted
+          ? strings.deleted
+          : `${strings.words(wordCount(text))} · ${state.saving ? strings.saving : MODE_STATUS[state.mode]}`);
     remove.classList.toggle('is-armed', state.pendingDelete);
+    remove.dataset.action = state.deleted ? 'undo' : 'delete';
+    remove.textContent = state.deleted ? strings.undo : strings.delete;
     theme.textContent =
       effectiveTheme(state.theme) === 'dark' ? strings.themeLight : strings.themeDark;
   };
