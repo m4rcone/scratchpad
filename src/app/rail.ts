@@ -2,9 +2,11 @@
  * The side rail: drafts grouped by day, newest first. On a narrow screen the
  * same markup is an overlay, opened from the top bar and closed from its foot.
  * The HTML is rebuilt only when it would differ: a keystroke that does not
- * change a title leaves the DOM alone.
+ * change a title leaves the DOM alone. The logo sits at its head, in the
+ * rail's own dimmed ink, so it follows the theme without a second file.
  */
 import type { State } from './store.ts';
+import logo from './logo.svg?raw';
 import { escapeHtml } from './html.ts';
 import { groupByDay, timeLabel, titleOf } from './model.ts';
 import { strings } from './strings.ts';
@@ -42,6 +44,7 @@ export function createRail(root: HTMLElement): (state: State) => void {
       .join('');
 
     const html = `
+      <div class="rail__head" aria-hidden="true">${logo}</div>
       <div class="rail__list">${groups || `<div class="rail__empty">${strings.railEmpty}</div>`}</div>
       <div class="rail__foot">
         <button type="button" class="rail__action" data-action="new">${strings.newDraft}</button>

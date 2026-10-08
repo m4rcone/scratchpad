@@ -1,14 +1,15 @@
 /**
- * Generates the extension's PNG icons with no external dependency.
- * Run it only when the drawing changes: `node scripts/generate-icons.mjs`.
+ * Generates the extension's PNG icons from `src/app/logo.svg`, with no external
+ * dependency. Run it only when the logo changes: `node scripts/generate-icons.mjs`.
  */
 import { deflateSync } from 'node:zlib';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TARGET = join(ROOT, 'public', 'icons');
+const LOGO = join(ROOT, 'src', 'app', 'logo.svg');
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -32,91 +33,75 @@ function chunk(type, data) {
 }
 
 /*
- * The drawing is the editor itself, reduced to three marks on the app's own
- * palette: a dimmed marker, a word in ink, and the accent caret after it —
- * what the scratchpad looks like mid-sentence. A hairline ring in the app's
- * border colour keeps the dark tile from dissolving into a dark toolbar.
+ * The logo is one path of straight segments on a 156-unit square: its first
+ * ring is the tile, the rest are the mark (the app cuts the mark out, even-odd,
+ * and draws the file in its own ink). The icon paints them apart instead — a
+ * black tile with the mark in white, so it reads on any toolbar.
  *
- * It is laid out on a 16-unit grid, so at 16 and 32 pixels every edge lands on
- * a whole pixel and stays crisp. The Chrome Web Store wants the 128px icon's
- * artwork inside 96px with 16px of transparent margin, so from 48px up the same
- * grid is drawn inset by an eighth; the toolbar sizes use the full square.
+ * The Chrome Web Store wants the 128px icon's artwork inside 96px with 16px of
+ * transparent margin, so that one is drawn inset by an eighth; the others use
+ * the full square.
  */
-const HAIR = [44, 44, 50];
-const BG = [15, 15, 16];
-const MARK = [124, 121, 114];
-const INK = [232, 230, 226];
-const ACCENT = [134, 169, 234];
+const TILE = [0, 0, 0];
+const MARK = [255, 255, 255];
+const VIEW = 156;
 
-function shapes(side) {
-  const m = side >= 48 ? 0.125 : 0;
-  const u = (1 - 2 * m) / 16;
-  const at = (x, y, w, h, r, color) => ({
-    x0: m + x * u,
-    y0: m + y * u,
-    x1: m + (x + w) * u,
-    y1: m + (y + h) * u,
-    r: r * u,
-    color,
-  });
-  // One device pixel at the toolbar sizes, a touch more on the large ones.
-  const ring = Math.max(1, side / 96) / side / u;
-  return [
-    at(0, 0, 16, 16, 4, HAIR),
-    at(ring, ring, 16 - 2 * ring, 16 - 2 * ring, 4 - ring, BG),
-    at(3, 7, 2, 2, 1, MARK),
-    at(6, 7, 5, 2, 1, INK),
-    at(12, 4, 1, 8, 0.5, ACCENT),
-  ];
+function outlines() {
+  const svg = readFileSync(LOGO, 'utf8');
+  const d = svg.match(/ d="([^"]+)"/)[1];
+  return d
+    .split('Z')
+    .filter((part) => part.trim())
+    .map((part) =>
+      [...part.matchAll(/[ML]\s*([\d.]+)\s+([\d.]+)/g)].map((m) => [
+        +m[1] / VIEW,
+        +m[2] / VIEW,
+      ]),
+    );
 }
 
-/** Signed distance to a rounded rectangle: negative inside, in unit lengths. */
-function distance(px, py, { x0, y0, x1, y1, r }) {
-  const cx = (x0 + x1) / 2;
-  const cy = (y0 + y1) / 2;
-  const qx = Math.abs(px - cx) - (x1 - x0) / 2 + r;
-  const qy = Math.abs(py - cy) - (y1 - y0) / 2 + r;
-  const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
-  return outside + Math.min(Math.max(qx, qy), 0) - r;
-}
-
-/** Colour of one pixel, antialiased by sampling a 4×4 grid inside it. */
-function pixel(x, y, side, drawing) {
-  const grid = 4;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let a = 0;
-  for (let sy = 0; sy < grid; sy++) {
-    for (let sx = 0; sx < grid; sx++) {
-      const px = (x + (sx + 0.5) / grid) / side;
-      const py = (y + (sy + 0.5) / grid) / side;
-      let color = null;
-      for (const shape of drawing) if (distance(px, py, shape) <= 0) color = shape.color;
-      if (!color) continue;
-      r += color[0];
-      g += color[1];
-      b += color[2];
-      a += 1;
+/** A point is inside a ring when a ray from it crosses an odd number of edges. */
+function inside(px, py, ring) {
+  let odd = false;
+  {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)
+        odd = !odd;
     }
   }
-  if (!a) return [0, 0, 0, 0];
-  return [
-    Math.round(r / a),
-    Math.round(g / a),
-    Math.round(b / a),
-    Math.round((255 * a) / (grid * grid)),
-  ];
+  return odd;
+}
+
+/** Colour of one pixel, antialiased by sampling an 8×8 grid inside it. */
+function pixel(x, y, side, [tile, ...mark]) {
+  const grid = 8;
+  const m = side === 128 ? 0.125 : 0;
+  let hits = 0;
+  let white = 0;
+  for (let sy = 0; sy < grid; sy++) {
+    for (let sx = 0; sx < grid; sx++) {
+      const px = ((x + (sx + 0.5) / grid) / side - m) / (1 - 2 * m);
+      const py = ((y + (sy + 0.5) / grid) / side - m) / (1 - 2 * m);
+      if (!inside(px, py, tile)) continue;
+      hits++;
+      if (mark.some((ring) => inside(px, py, ring))) white++;
+    }
+  }
+  if (!hits) return [0, 0, 0, 0];
+  const color = TILE.map((c, i) => Math.round(c + ((MARK[i] - c) * white) / hits));
+  return [...color, Math.round((255 * hits) / (grid * grid))];
 }
 
 function png(side) {
   const raw = Buffer.alloc(side * (side * 4 + 1));
-  const drawing = shapes(side);
+  const rings = outlines();
   let p = 0;
   for (let y = 0; y < side; y++) {
     raw[p++] = 0; // "none" filter
     for (let x = 0; x < side; x++) {
-      const [r, g, b, a] = pixel(x, y, side, drawing);
+      const [r, g, b, a] = pixel(x, y, side, rings);
       raw[p++] = r;
       raw[p++] = g;
       raw[p++] = b;

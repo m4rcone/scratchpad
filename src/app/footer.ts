@@ -4,8 +4,9 @@
  * survives the keystroke that re-counts the words.
  *
  * After an update worth mentioning, a "what's new" link leads the actions for
- * one session. Delete asks for a second press. Once it has gone through, the button turns
- * into "undo" for a few seconds: the pointer that deleted is already on it.
+ * one session. Delete asks for a second press. Once it has gone through, the
+ * status offers "undo" for a few seconds, beside the notice that says what
+ * happened; delete itself stays delete, so the next draft can go at once.
  */
 import type { State } from './store.ts';
 import { wordCount } from './model.ts';
@@ -28,7 +29,10 @@ const MODE_STATUS = {
 
 export function createFooter(root: HTMLElement): (state: State, text: string) => void {
   root.innerHTML = `
-    <div class="footer__status"></div>
+    <div class="footer__status">
+      <span class="footer__text"></span>
+      <button type="button" class="footer__action" data-action="undo" hidden>${strings.undo}</button>
+    </div>
     <div class="footer__actions">
       <a class="footer__action" data-action="news" href="${CHANGELOG_URL}" target="_blank" rel="noopener noreferrer" hidden></a>
       <button type="button" class="footer__action" data-action="copy">${strings.copy}</button>
@@ -37,7 +41,8 @@ export function createFooter(root: HTMLElement): (state: State, text: string) =>
       <button type="button" class="footer__action" data-action="theme"></button>
     </div>`;
 
-  const status = root.querySelector<HTMLElement>('.footer__status')!;
+  const status = root.querySelector<HTMLElement>('.footer__text')!;
+  const undo = root.querySelector<HTMLElement>('[data-action="undo"]')!;
   const remove = root.querySelector<HTMLElement>('[data-action="delete"]')!;
   const theme = root.querySelector<HTMLElement>('[data-action="theme"]')!;
   const news = root.querySelector<HTMLElement>('[data-action="news"]')!;
@@ -51,9 +56,8 @@ export function createFooter(root: HTMLElement): (state: State, text: string) =>
           : `${strings.words(wordCount(text))} · ${state.saving ? strings.saving : MODE_STATUS[state.mode]}`);
     news.hidden = !state.whatsNew;
     if (state.whatsNew) news.textContent = strings.whatsNew(shortVersion(state.whatsNew));
+    undo.hidden = !state.deleted || state.pendingDelete || !!state.status;
     remove.classList.toggle('is-armed', state.pendingDelete);
-    remove.dataset.action = state.deleted ? 'undo' : 'delete';
-    remove.textContent = state.deleted ? strings.undo : strings.delete;
     theme.textContent =
       effectiveTheme(state.theme) === 'dark' ? strings.themeLight : strings.themeDark;
   };

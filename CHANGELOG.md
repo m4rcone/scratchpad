@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-08
+
+### Added
+
+- The logo, small and dimmed, at the head of the drafts rail.
+
+### Changed
+
+- A new logo and toolbar icon.
+- After a delete, "undo" sits beside the status instead of taking the delete
+  button's place, so another draft can be deleted straight away.
+
 ## [1.1.0] — 2026-10-07
 
 ### Added
@@ -54,6 +66,7 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/m4rcone/scratchpad-newtab/releases/tag/v1.0.0

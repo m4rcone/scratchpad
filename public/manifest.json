@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Scratchpad",
   "short_name": "Scratchpad",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A markdown scratchpad one click away on the toolbar. No account, no network, data stays on your machine.",
   "homepage_url": "https://github.com/m4rcone/scratchpad-newtab",
   "minimum_chrome_version": "120",
