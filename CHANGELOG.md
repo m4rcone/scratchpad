@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Changed
+
+- After a delete, "undo" sits beside the status instead of taking the delete
+  button's place, so another draft can be deleted straight away.
+
 ## [1.1.0] — 2026-10-07
 
 ### Added

@@ -264,6 +264,12 @@ button {
 }
 
 .footer__status {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.footer__text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -276,8 +282,8 @@ button {
 }
 
 /* Delete is the one action that loses something, so it warns in red — on
-   hover, and while it waits for the confirming second press. For the few
-   seconds it can be taken back, it reads "undo" in the accent instead. */
+   hover, and while it waits for the confirming second press. The "undo" that
+   follows it sits beside the status, in the accent. */
 .footer__action.is-armed {
   color: var(--danger);
 }
