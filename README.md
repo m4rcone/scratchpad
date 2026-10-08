@@ -7,7 +7,7 @@ network, your data never leaves your machine.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/support-ko--fi-FF5E5B.svg)](https://ko-fi.com/m4rcone)
 
-![Scratchpad in split view: the markdown source on the left, the rendered preview on the right](.github/screenshot.png)
+![Scratchpad: markdown notes, one click away. No account, no network. Beside it, the app in split view, the markdown source on the left and the rendered preview on the right](.github/banner.png)
 
 Version **1.1.0**.
 
