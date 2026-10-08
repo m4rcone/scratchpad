@@ -5,8 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Added
+
+- The logo, small and dimmed, at the head of the drafts rail.
+
 ### Changed
 
+- A new logo and toolbar icon.
 - After a delete, "undo" sits beside the status instead of taking the delete
   button's place, so another draft can be deleted straight away.
 

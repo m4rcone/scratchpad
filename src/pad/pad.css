@@ -149,9 +149,29 @@ button {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-top: 40px;
+  padding-top: 24px;
   display: flex;
   flex-direction: column;
+}
+
+/* The logo, in the dimmed ink of the rail's labels: present, never loud. The
+   mark is cut out of the tile, so the page's own background shows through.
+   The head is as tall as the editor's toolbar beside it, hairline included,
+   so the logo sits on the line of the toolbar's icons and the two hairlines
+   run across the window as one. */
+.rail__head {
+  flex: none;
+  height: 44px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--hair);
+  display: flex;
+  align-items: center;
+  color: var(--mark);
+}
+
+.rail__head svg {
+  width: 20px;
+  height: 20px;
 }
 
 .rail__group {
@@ -490,8 +510,8 @@ button {
     padding: 0 var(--safe-right) 0 var(--safe-left);
   }
 
-  .rail__list {
-    padding-top: 20px;
+  .rail__head {
+    padding-left: var(--gutter);
   }
 
   .rail.is-open {
