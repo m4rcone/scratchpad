@@ -37,9 +37,9 @@ means here.
 
 The app owns the view state: `data-mode` is `write`, `split` or `read`.
 ByteMD's own right-hand toolbar buttons 2–5 (write only, preview only,
-fullscreen, GitHub) are hidden in `bytemd.css`; the app's split, read and Ko-fi
-buttons come from the bridge plugin in `editor.ts` and sit at indexes 6, 7
-and 8. A ByteMD upgrade that reorders those buttons breaks that CSS.
+fullscreen, GitHub) are hidden in `bytemd.css`; the app's write, split and
+read switch comes from the bridge plugin in `editor.ts` and sits at indexes 6,
+7 and 8. A ByteMD upgrade that reorders those buttons breaks that CSS.
 
 Markdown markers stay visible, dimmed. Obsidian-style live preview (markers
 hidden until the caret reaches them) was declined: it means hand-built widgets

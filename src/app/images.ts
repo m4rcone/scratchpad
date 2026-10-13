@@ -5,6 +5,8 @@ export interface HastNode {
   properties?: Record<string, unknown>;
   children?: HastNode[];
   value?: string;
+  /** Where the node's markdown starts, kept from the parse; see `tasks.ts`. */
+  position?: { start: { offset?: number } };
 }
 
 /**

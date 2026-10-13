@@ -8,16 +8,34 @@
   --bg: #0f0f10;
   --ink: #e8e6e2;
   --muted: #9a968e;
-  --mark: #7c7972;
+  /* 5:1 on the background: the dimmest text still reads at 12.5px (WCAG AA). */
+  --mark: #85827b;
   --hair: #26262a;
   --accent: #86a9ea;
   --code: #c9b48a;
   --code-bg: #16161a;
-  --selection: rgba(134, 169, 234, 0.14);
+  /* Strong enough to find at a glance (1.7:1 on the background) with the
+     text over it still at 9:1. */
+  --selection: rgba(134, 169, 234, 0.28);
+  /* Find's matches, and search's: a warm wash, so a match is never mistaken
+     for the selection beside it (2:1 on the background, the text 7.7:1). */
+  --match: rgba(201, 180, 138, 0.32);
   --danger: #f0736c;
   /* The edge of a block that scrolls sideways. Black is lost on the dark
      background, so dark gets a faint light edge instead. */
   --scroll-shadow: rgba(255, 255, 255, 0.2);
+  /* The open draft in the rail, the view that is on: a wash of the accent. */
+  --tint: rgba(134, 169, 234, 0.1);
+  /* Behind the note a dragged file brings up. */
+  --scrim: rgba(15, 15, 16, 0.86);
+  /* The toolbar and the footer, which float over the text: the page's own
+     ground, a little see-through. */
+  --bar: color-mix(in srgb, var(--bg) var(--bar-opacity), transparent);
+  /* Dark letters under a light veil fade faster than light ones under a dark
+     one, so the light theme's veil is thinner. */
+  --bar-opacity: 82%;
+  /* Under what floats over the text: the find panel. */
+  --float-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
 
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -43,11 +61,17 @@
     --mark: #6e6b64;
     --hair: #e2dfd8;
     --accent: #2f5fbe;
-    --code: #8a6d2f;
+    /* 5:1 on the code background (WCAG AA). */
+    --code: #7d6229;
     --code-bg: #f2f0ea;
-    --selection: rgba(47, 95, 190, 0.1);
+    --selection: rgba(47, 95, 190, 0.22);
+    --match: rgba(138, 109, 47, 0.38);
     --danger: #c9342c;
     --scroll-shadow: rgba(0, 0, 0, 0.16);
+    --tint: rgba(47, 95, 190, 0.08);
+    --scrim: rgba(251, 250, 248, 0.9);
+    --float-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    --bar-opacity: 70%;
     color-scheme: light;
   }
 }
@@ -59,11 +83,16 @@
   --mark: #6e6b64;
   --hair: #e2dfd8;
   --accent: #2f5fbe;
-  --code: #8a6d2f;
+  --code: #7d6229;
   --code-bg: #f2f0ea;
-  --selection: rgba(47, 95, 190, 0.1);
+  --selection: rgba(47, 95, 190, 0.22);
+  --match: rgba(138, 109, 47, 0.38);
   --danger: #c9342c;
   --scroll-shadow: rgba(0, 0, 0, 0.16);
+  --tint: rgba(47, 95, 190, 0.08);
+  --scrim: rgba(251, 250, 248, 0.9);
+  --float-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  --bar-opacity: 70%;
   color-scheme: light;
 }
 
@@ -111,8 +140,16 @@ button {
 }
 
 :focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Full-width rows in a scrolling list, and the undo inside the status that
+   clips its overflow, would have the ring's sides cut off; it goes inside. */
+.rail__row:focus-visible,
+.result:focus-visible,
+.footer__status :focus-visible {
+  outline-offset: -2px;
 }
 
 .shell {
@@ -187,21 +224,40 @@ button {
   padding: 0 24px 12px;
 }
 
+/* The day a group belongs to reads as a heading over its drafts, not as one
+   more of them: small capitals, tracked, a step bolder. */
+.rail__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-bottom: 8px;
+}
+
+/* Every row's text starts on the labels' edge, 24px in: the 3px border is
+   part of that inset, so the open draft's accent does not push it over. */
 .rail__row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 7px 24px;
+  padding: 7px 24px 7px 21px;
   border-left: 3px solid transparent;
 }
 
 .rail__row.is-active {
-  padding-left: 21px;
   border-left-color: var(--accent);
+  background: var(--tint);
 }
 
 .rail__title {
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.rail__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -216,13 +272,86 @@ button {
   flex: none;
 }
 
+/* On the accent's wash the dimmest ink falls under 4.5:1; one step up holds. */
+.rail__row.is-active .rail__time,
+.result.is-active .result__time {
+  color: var(--muted);
+}
+
+/* Its hairline runs the rail's full width, like the head's; the actions keep
+   the 24px inset. */
 .rail__foot {
   flex: none;
-  padding: 12px 24px calc(20px + var(--safe-bottom));
+  padding: 10px 24px calc(16px + var(--safe-bottom));
+  border-top: 1px solid var(--hair);
   display: flex;
   flex-direction: column;
+  color: var(--muted);
+}
+
+/* Three actions, one per line: what it does on the left, its key — or what
+   it has to say — on the right. New draft, the one the rail is for, is in the
+   text's own ink. */
+.rail__action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.rail__new {
+  color: var(--ink);
+}
+
+/* Each action answers to the hover with a wash, like the rows above it. */
+.rail__action {
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 5px;
+}
+
+.rail__due {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  color: var(--mark);
+  color: var(--danger);
+}
+
+.rail__due-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* An update's news, beside "settings": the backup flag's dot, in the accent,
+   since it is no risk. */
+.rail__news {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* The same news in the settings' About: a dot and the word. */
+.news-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.news-flag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* Closing is for the overlay: on a wide screen the rail never goes away. */
@@ -249,6 +378,29 @@ button {
   align-items: center;
 }
 
+/* The rail's flags, carried by the button that opens it. */
+.topbar__flag {
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.topbar__flag.is-due {
+  background: var(--danger);
+}
+
+.topbar__logo {
+  display: flex;
+  color: var(--mark);
+}
+
+.topbar__logo svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* ---------- editor ---------- */
 
 .column {
@@ -256,6 +408,12 @@ button {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* What the find panel and the footer float against. */
+  position: relative;
+  /* The floating bars' heights, measured in `main.ts`; these are first-paint
+     guesses. */
+  --toolbar-h: 44px;
+  --footer-h: 45px;
 }
 
 /*
@@ -269,11 +427,322 @@ button {
   display: flex;
 }
 
+/* ---------- find panel ---------- */
+
+/*
+ * Floats at the top right of the source, just under the toolbar, the way
+ * editors put it. In split view it keeps to the source's half: it searches the
+ * markdown, so it does not sit over the preview. It follows `.editor` in the
+ * markup so the split rule can find it.
+ */
+.find {
+  position: absolute;
+  z-index: 2;
+  top: 52px;
+  right: calc(16px + var(--safe-right));
+  width: 380px;
+  max-width: calc(100% - 32px);
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  box-shadow: var(--float-shadow);
+  color: var(--muted);
+  font-size: var(--ui-size);
+}
+
+.editor[data-mode='split'] + .find {
+  right: calc(50% + 16px);
+  max-width: calc(50% - 32px);
+}
+
+.find[hidden] {
+  display: none;
+}
+
+.find__rows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.find__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.find__replace[hidden] {
+  display: none;
+}
+
+/* A field with a box, and the count inside it on the right. */
+.find__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin-right: 4px;
+  padding: 0 8px;
+  background: var(--code-bg);
+  border: 1px solid var(--hair);
+  border-radius: 5px;
+  cursor: text;
+}
+
+.find__field:focus-within {
+  border-color: var(--accent);
+}
+
+.find.is-missing .find__field:first-child {
+  border-color: var(--danger);
+}
+
+.find__input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  padding: 0;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+.find__input::placeholder {
+  color: var(--mark);
+}
+
+.find__count {
+  flex: none;
+  color: var(--mark);
+  font-variant-numeric: tabular-nums;
+}
+
+.find.is-missing .find__count {
+  color: var(--danger);
+}
+
+/* Square buttons with room to hit them: the toggle, match case, previous,
+   next, close. A pressed toggle is tinted like the view that is on. */
+.find__icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.find__icon[aria-pressed='true'] {
+  background: var(--tint);
+  color: var(--ink);
+}
+
+.find__toggle svg {
+  transition: transform 150ms ease;
+}
+
+.find__toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.find__button {
+  flex: none;
+  height: 28px;
+}
+
+.find__button + .find__button {
+  margin-left: 4px;
+}
+
+/* ---------- settings ---------- */
+
+/* Laid over the column like search: one centred column at the reading
+   measure, its own scroll, sections parted by hairlines. */
+.settings {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 40px calc(var(--gutter) + var(--safe-right)) calc(40px + var(--safe-bottom))
+    calc(var(--gutter) + var(--safe-left));
+  display: flex;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.settings[hidden] {
+  display: none;
+}
+
+.settings__col {
+  width: 100%;
+  max-width: 60ch;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.settings__title {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 21px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.settings__close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mark);
+  font-size: var(--ui-size);
+}
+
+.settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.settings__section:last-child {
+  border-bottom: none;
+}
+
+.settings__section h2 {
+  margin: 0;
+  font-size: var(--ui-size);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mark);
+}
+
+.settings__section p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.settings__status {
+  color: var(--ink);
+}
+
+.settings__status.is-stale {
+  color: var(--danger);
+}
+
+/* The version just updated to, while its news has not been looked at. */
+.settings__new {
+  margin-left: 8px;
+}
+
+.settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.settings__button {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+/* A backup that was read, waiting for a yes. */
+.settings__restore {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--hair);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--tint);
+}
+
+.settings__restore p {
+  color: var(--ink);
+}
+
+.settings__segments {
+  display: flex;
+  align-self: flex-start;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.settings__segments button {
+  padding: 4px 12px;
+  border-radius: 4px;
+  color: var(--mark);
+  font-size: 13px;
+}
+
+.settings__segments button[aria-pressed='true'] {
+  background: var(--tint);
+  color: var(--ink);
+}
+
+.settings__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.settings__icon .fill {
+  transition: fill 0.15s;
+}
+
+.settings__link:hover .settings__icon .fill,
+.settings__link:focus-visible .settings__icon .fill {
+  fill: currentColor;
+}
+
 /* ---------- footer ---------- */
 
 .footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   border-top: 1px solid var(--hair);
-  padding: 14px calc(var(--gutter) + var(--safe-right)) calc(14px + var(--safe-bottom))
+  padding: 10px calc(var(--gutter) + var(--safe-right)) calc(10px + var(--safe-bottom))
     calc(var(--gutter) + var(--safe-left));
   display: flex;
   justify-content: space-between;
@@ -285,20 +754,149 @@ button {
 
 .footer__status {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  /* On a narrow window the status gives way to the actions — it is cut, never
+     drawn over them. */
+  overflow: hidden;
 }
 
 .footer__text {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.footer__text.is-failed {
+  color: var(--danger);
+}
+
+.footer__count {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: 6px;
+  color: var(--mark);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.footer__count[hidden] {
+  display: none;
+}
+
+.footer__keys {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--mark);
+}
+
+/* Key caps, wherever a hint names a key: the footer, search, the empty draft.
+   The hints' own rule sets a larger size. */
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--code-bg);
+  border: 1px solid var(--hair);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.key-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.key-hint + .key-hint {
+  margin-left: 12px;
+}
+
+/* The seconds an undo has left, running down along the footer's top edge. */
+.footer__timer {
+  position: absolute;
+  left: 0;
+  top: -1px;
+  height: 1px;
+  width: 0;
+  background: var(--accent);
+}
+
+.footer__timer.is-running {
+  animation: drain linear forwards;
+}
+
+@keyframes drain {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
 .footer__actions {
   display: flex;
+  align-items: center;
   gap: 24px;
   flex: none;
+}
+
+/* Both halves of the footer are one fixed height, so a key cap appearing in
+   the status — "esc", "↵" — never makes it jump. */
+.footer__status,
+.footer__actions {
+  height: 24px;
+}
+
+/*
+ * The settings' buttons and the find panel's replace buttons are drawn as key
+ * caps — the same object as the shortcut hints, a thicker lower edge, pressed
+ * in when clicked. The footer's actions stay plain words.
+ */
+.find__button,
+.settings__button {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--code-bg);
+  border: 1px solid var(--hair);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+}
+
+.find__button:active,
+.settings__button:active {
+  border-bottom-width: 1px;
+  transform: translateY(1px);
+}
+
+.settings__button.is-primary {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Hairlines between kinds of thing: the save state and the counts on the
+   left; what acts on this draft and the theme, which is the app's, on the
+   right. Rules, not characters, so nothing reads as part of a sentence. */
+.footer__sep {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  background: var(--hair);
 }
 
 /* Delete is the one action that loses something, so it warns in red — on
@@ -308,18 +906,91 @@ button {
   color: var(--danger);
 }
 
-.footer__action[data-action='undo'],
-.footer__action[data-action='news'] {
+/* A button that just did its job says so, in the accent, for a moment — the
+   pointer is still on it, so this outranks the hover colour. */
+.footer__action.is-done,
+.footer__action.is-done:hover {
+  color: var(--accent);
+}
+
+.footer__action[data-action='undo'] {
   color: var(--accent);
   text-decoration: none;
 }
 
-/* A file dragged over the page: one inset line says it will be taken in. */
-.shell[data-dropping] {
-  /* An outline, not an inset shadow: it is painted over the panes' own
-     backgrounds instead of under them. */
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+/* A file dragged over the page: a sheet over everything says what it will
+   become. It never takes the pointer, so the drop reaches the window. */
+.drop-hint {
+  position: fixed;
+  inset: 12px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border: 1.5px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--scrim);
+  color: var(--muted);
+  font-size: var(--ui-size);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.drop-hint span {
+  display: block;
+}
+
+.drop-hint strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.shell[data-dropping] .drop-hint {
+  opacity: 1;
+}
+
+/* ---------- empty draft ---------- */
+
+/* An empty draft: the placeholder stays at the top, where the writing will
+   start, and the keys worth knowing first sit in the middle of the source
+   pane — the left half in split view. It takes no pointer, so a click still
+   lands in the editor beneath it. */
+.hints {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  color: var(--mark);
+  /* A step above the UI text: alone in an empty pane, it can be read. */
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.hints[hidden] {
+  display: none;
+}
+
+.editor[data-mode='split'] ~ .hints {
+  left: 25%;
+}
+
+.hints__keys {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: start;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.hints kbd {
+  justify-self: start;
+  font-size: 13px;
+  padding: 1px 7px;
 }
 
 /* ---------- search ---------- */
@@ -379,6 +1050,12 @@ button {
   appearance: none;
 }
 
+/* The field has no box of its own: its rule is what lights up, as the find
+   field's border does. */
+.search__row:focus-within {
+  border-bottom-color: var(--accent);
+}
+
 .search__input::placeholder {
   color: var(--mark);
 }
@@ -387,7 +1064,8 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 24px;
+  /* The same step as between the key hints, so the close reads as one more. */
+  gap: 12px;
   padding-top: 8px;
   color: var(--mark);
   font-size: var(--ui-size);
@@ -397,9 +1075,23 @@ button {
   margin-right: auto;
 }
 
-/* The keyboard hint and the close button trade places with the screen size. */
+/* Closing is a button, as in settings: `esc close`, and a click does it too. */
 .search__close {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mark);
+}
+
+/* Out of sight, still read aloud. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .search__results {
@@ -418,16 +1110,18 @@ button {
   padding: 10px 0 10px 20px;
 }
 
+/* The row the arrows are on looks like the open draft in the rail: an accent
+   edge and a wash, the text on the same line either way. */
 .result {
   display: block;
   width: 100%;
-  padding: 10px 0 10px 20px;
+  padding: 10px 16px 10px 17px;
   border-left: 3px solid transparent;
 }
 
 .result.is-active {
-  padding-left: 17px;
   border-left-color: var(--accent);
+  background: var(--tint);
 }
 
 .result__head {
@@ -440,6 +1134,13 @@ button {
 
 .result.is-active .result__head {
   color: var(--ink);
+}
+
+/* The query, where it matched: the same wash as find in the source. */
+.result mark {
+  background: var(--match);
+  color: var(--ink);
+  border-radius: 2px;
 }
 
 .result__time {
@@ -460,18 +1161,71 @@ button {
 
 /* ---------- hover: only where a pointer can hover ---------- */
 
+/* State changes fade in quickly instead of snapping, so a "copied" or a red
+   "not saved" is seen arriving. Nothing moves; colours only. */
+button,
+a,
+.rail__row,
+.rail__title {
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @media (hover: hover) {
-  .rail__action:hover,
   .topbar__action:hover {
     color: var(--muted);
+  }
+
+  .rail__action:hover {
+    color: var(--ink);
+    background: var(--code-bg);
   }
 
   .rail__row:hover .rail__title {
     color: var(--ink);
   }
 
-  .footer__action:hover {
+  .footer__action:hover,
+  .find__icon:hover,
+  .settings__close:hover,
+  .search__close:hover,
+  .settings__segments button:hover {
     color: var(--ink);
+  }
+
+  .find__icon:hover {
+    background: var(--code-bg);
+  }
+
+  .find__icon[aria-pressed='true']:hover {
+    background: var(--tint);
+  }
+
+  .find__button:hover,
+  .settings__button:hover {
+    color: var(--ink);
+    border-color: var(--mark);
+  }
+
+  .settings__button.is-primary:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--tint);
+  }
+
+  .settings__link:hover {
+    text-decoration: underline;
   }
 
   .footer__action[data-action='delete']:hover {
@@ -481,11 +1235,42 @@ button {
 
 /* ---------- narrow screens ---------- */
 
-@media (max-width: 720px) {
+/*
+ * Three widths. Up to 1100px — a laptop window, or a wide monitor in Chrome's
+ * split view — the rail narrows and the margins tighten so the toolbar still
+ * fits on one line. Up to 880px the rail becomes a sheet over the column,
+ * opened from a top bar, and the column takes the whole window. Up to 720px —
+ * a phone, or a very thin split — the touch sizes come in.
+ */
+@media (max-width: 1100px) {
   :root {
-    /* 16px is the size below which a phone zooms into a focused field. */
-    --editor-size: 16px;
-    --gutter: 16px;
+    --gutter: 40px;
+  }
+
+  .rail {
+    width: 200px;
+  }
+
+  .rail__head,
+  .rail__label,
+  .rail__empty {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .rail__row {
+    padding: 7px 20px 7px 17px;
+  }
+
+  .rail__foot {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+@media (max-width: 880px) {
+  :root {
+    --gutter: 24px;
   }
 
   .topbar {
@@ -498,12 +1283,13 @@ button {
     color: var(--ink);
   }
 
-  /* The rail becomes a sheet over the column, opened from the top bar. */
+  /* The rail becomes a sheet over the column, opened from the top bar — and
+     over the floating toolbar and footer too, which sit at 2. */
   .rail {
     display: none;
     position: absolute;
     inset: 0;
-    z-index: 2;
+    z-index: 4;
     width: 100%;
     border-right: none;
     background: var(--bg);
@@ -530,15 +1316,13 @@ button {
     align-items: center;
   }
 
-  .rail__row.is-active {
+  .rail__row {
     padding-left: calc(var(--gutter) - 3px);
   }
 
   .rail__foot {
     padding-left: var(--gutter);
     padding-right: var(--gutter);
-    gap: 0;
-    border-top: 1px solid var(--hair);
   }
 
   .rail__action,
@@ -558,14 +1342,13 @@ button {
     gap: 16px;
   }
 
-  .footer__action {
-    min-height: 36px;
-    display: flex;
-    align-items: center;
-  }
-
   .search {
     padding-top: 20px;
+  }
+
+  /* The top bar sits above the toolbar now, so the panel sits lower. */
+  .find {
+    top: 96px;
   }
 
   .search__slash,
@@ -578,7 +1361,6 @@ button {
   }
 
   .search__close {
-    display: block;
     color: var(--ink);
     min-height: 32px;
   }
@@ -587,5 +1369,63 @@ button {
     padding-top: 12px;
     padding-bottom: 12px;
     min-height: 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    /* 16px is the size below which a phone zooms into a focused field. */
+    --editor-size: 16px;
+    --gutter: 16px;
+  }
+
+  /* The toolbar above the text wraps here, so the hints would land on it. */
+  .hints {
+    display: none;
+  }
+
+  /* A finger needs more than 24px. */
+  .footer__status,
+  .footer__actions {
+    height: 32px;
+  }
+
+  .footer__action {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* The toolbar wraps here, so its height is not known: the panel takes the
+     top of the column instead, over the bars, and the whole width. */
+  .find,
+  .editor[data-mode='split'] + .find {
+    top: 8px;
+    left: calc(var(--gutter) + var(--safe-left));
+    right: calc(var(--gutter) + var(--safe-right));
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* A thin split view or a phone: the counts give way before the actions do,
+   tokens first. */
+@media (max-width: 560px) {
+  .footer__tokens {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .footer__count {
+    display: none;
+  }
+}
+
+/* Too narrow for the key caps beside a question: the words stay, and the
+   keys still work. */
+@media (max-width: 720px) {
+  .footer__keys {
+    display: none;
   }
 }

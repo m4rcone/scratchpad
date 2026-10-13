@@ -1,6 +1,13 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Draft, DraftStore, Prefs, PrefsStore } from '../storage/types.ts';
+import type {
+  Draft,
+  DraftEvent,
+  DraftStore,
+  DraftSync,
+  Prefs,
+  PrefsStore,
+} from '../storage/types.ts';
 
 // `createStore` schedules its saves through `window.setTimeout`. Nothing here
 // waits for one, so the stub only has to exist; the localStorage mirror is
@@ -104,6 +111,34 @@ test('an empty disk and an empty editor still open one draft', async () => {
   assert.equal(store.state.drafts.length, 1);
 });
 
+test('a disk that cannot be read still opens a draft, and keeps what is typed', async () => {
+  let back = false;
+  const broken: DraftStore = {
+    async all() {
+      throw new Error('disk gone');
+    },
+    async put() {
+      if (!back) throw new Error('disk gone');
+    },
+    async remove() {},
+  };
+  const store = createStore(broken, noPrefs, 'system');
+
+  const active = await store.load(() => 'typed while it failed');
+  assert.equal(store.state.loaded, true);
+  assert.equal(store.state.loadFailed, true);
+  assert.equal(active?.text, 'typed while it failed');
+
+  // With an active draft, the next keystroke has somewhere to go: the mirror.
+  store.write('typed while it failed, and more', 31);
+  assert.equal(pending()[0]?.text, 'typed while it failed, and more');
+
+  // Once the disk answers again, the retry gets it there.
+  back = true;
+  await store.flush();
+  assert.deepEqual(pending(), []);
+});
+
 /** A disk that answers at once, recording what it was asked to write. */
 function disk(stored: Draft[], put: (draft: Draft) => Promise<void> = async () => {}) {
   const written: { id: string; text: string }[] = [];
@@ -153,10 +188,12 @@ test('a write that fails stays pending and is tried again', async () => {
   await store.flush();
   assert.equal(written.length, 0, 'nothing landed');
   assert.equal(pending()[0]?.text, 'what the disk refused', 'so the mirror holds on');
+  assert.equal(store.state.saveFailed, true, 'and the footer says so until it lands');
 
   failing = false;
   await store.flush();
   assert.equal(written[0]?.text, 'what the disk refused', 'the retry lands');
+  assert.equal(store.state.saveFailed, false);
   assert.deepEqual(pending(), [], 'and only then is the mirror let go');
 });
 
@@ -300,7 +337,7 @@ test('deleting a draft with text asks first, and can still be undone after', asy
   assert.ok(!store.state.drafts.some((d) => d.id === 'stored'));
 });
 
-test("an update's news is shown for one session, then forgotten on the disk", async () => {
+test("an update's news waits until settings is opened, then goes when it closes", async () => {
   const written: Partial<Prefs>[] = [];
   const prefs: PrefsStore = {
     async read() {
@@ -315,8 +352,337 @@ test("an update's news is shown for one session, then forgotten on the disk", as
   await store.load(() => '');
 
   assert.equal(store.state.whatsNew, '1.1.0');
-  assert.deepEqual(written, [{ whatsNew: null }], 'cleared as soon as it is read');
+  assert.deepEqual(written, [], 'kept on the disk until it is seen');
 
-  store.dismissNews();
+  store.setSettings(true);
+  assert.deepEqual(written, [{ whatsNew: null }], 'cleared on the disk once seen');
+  assert.equal(store.state.whatsNew, '1.1.0', 'still marked while the panel is open');
+
+  store.setSettings(false);
   assert.equal(store.state.whatsNew, null);
+});
+
+/** A channel between two stores in the same test, as two tabs would share. */
+function channel() {
+  const handlers: ((event: DraftEvent) => void)[] = [];
+  return (): DraftSync => {
+    let mine: ((event: DraftEvent) => void) | null = null;
+    return {
+      publish(event) {
+        // Cloned, as `postMessage` does, and never echoed to the sender.
+        const copy = structuredClone(event);
+        for (const handler of handlers) if (handler !== mine) handler(copy);
+      },
+      subscribe(handler) {
+        mine = handler;
+        handlers.push(handler);
+      },
+    };
+  };
+}
+
+test("another tab's newer text replaces the open draft, keeping this caret", async () => {
+  const tab = channel();
+  const a = createStore(disk([draft({ text: 'old' })]).store, noPrefs, 'system', tab());
+  const b = createStore(disk([draft({ text: 'old' })]).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+  b.moveCaret(2);
+  const before = b.state.replaced;
+
+  a.write('new text', 8);
+  await a.flush();
+
+  assert.equal(b.active()?.text, 'new text');
+  assert.equal(b.active()?.caret, 2);
+  assert.equal(b.state.replaced, before + 1, 'the editor is told to reload');
+});
+
+test('a stale copy from another tab does not overwrite newer text here', async () => {
+  const tab = channel();
+  const a = createStore(disk([draft({})]).store, noPrefs, 'system', tab());
+  const b = createStore(disk([draft({})]).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+
+  a.write('from a', 6);
+  b.write('from b, later', 13);
+  b.active()!.updatedAt = a.active()!.updatedAt + 1;
+  await a.flush();
+
+  assert.equal(b.active()?.text, 'from b, later');
+});
+
+test('a draft deleted or created in another tab follows here', async () => {
+  const tab = channel();
+  const stored = () => [
+    draft({ id: 'one', text: 'one', updatedAt: 2 }),
+    draft({ id: 'two', text: 'two', updatedAt: 1 }),
+  ];
+  const a = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  const b = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+
+  await a.remove();
+  assert.deepEqual(
+    b.state.drafts.map((d) => d.id),
+    ['two'],
+  );
+  assert.equal(b.state.activeId, 'two');
+
+  a.create('three');
+  await a.flush();
+  assert.ok(b.state.drafts.some((d) => d.text === 'three'));
+});
+
+test('what another tab says before this one has loaded is applied after', async () => {
+  const tab = channel();
+  const a = createStore(disk([draft({ text: 'old' })]).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  const { disk: slow, release } = slowDisk([draft({ text: 'old' })]);
+  const b = createStore(slow, noPrefs, 'system', tab());
+  const loading = b.load(() => '');
+
+  a.write('new', 3);
+  await a.flush();
+  release();
+  await loading;
+
+  assert.equal(b.active()?.text, 'new');
+});
+
+test('restoring adds what is new, updates what is newer, and skips the rest', async () => {
+  const { store: d, written } = disk([
+    draft({ id: 'a', text: 'alpha', updatedAt: 10 }),
+    draft({ id: 'b', text: 'beta', updatedAt: 10 }),
+  ]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  const outcome = store.importDrafts([
+    draft({ id: 'a', text: 'alpha, older', updatedAt: 5 }),
+    draft({ id: 'b', text: 'beta, newer', updatedAt: 20 }),
+    draft({ id: 'c', text: 'gamma', updatedAt: 1 }),
+    draft({ id: 'd', text: 'alpha', updatedAt: 1 }),
+  ]);
+
+  assert.deepEqual(outcome, { added: 1, updated: 1, same: 2 });
+  assert.equal(store.state.drafts.find((x) => x.id === 'a')?.text, 'alpha');
+  assert.equal(store.state.drafts.find((x) => x.id === 'b')?.text, 'beta, newer');
+  assert.ok(!store.state.drafts.some((x) => x.id === 'd'), 'same text, not again');
+  await store.flush();
+  assert.deepEqual(written.map((x) => x.id).sort(), ['b', 'c']);
+});
+
+test('the find bar closes on the way into the reading view', async () => {
+  const store = createStore(disk([draft({})]).store, noPrefs, 'system');
+  await store.load(() => '');
+  store.setFind(true);
+  store.setMode('split');
+  assert.equal(store.state.findOpen, true);
+  store.setMode('read');
+  assert.equal(store.state.findOpen, false);
+});
+
+test('a restore is previewed first, then applied, and drops the blank draft', async () => {
+  // Newest first, as the disk answers: the blank draft is the open one, the
+  // way a fresh install opens.
+  const { store: d, written } = disk([
+    draft({ id: 'blank', text: '', updatedAt: 20 }),
+    draft({ id: 'a', text: 'alpha', updatedAt: 10 }),
+  ]);
+  const removed: string[] = [];
+  d.remove = async (id) => void removed.push(id);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+  const backup = [
+    draft({ id: 'a', text: 'alpha, newer', updatedAt: 30 }),
+    draft({ id: 'b', text: 'beta', createdAt: 5, updatedAt: 6 }),
+    draft({ id: 'c', text: 'alpha, newer' }),
+  ];
+
+  // The backup holds the same text twice: the preview counts it once, as the
+  // restore will.
+  assert.deepEqual(store.previewImport(backup), { added: 1, updated: 1, same: 1 });
+  assert.equal(store.state.drafts.length, 2, 'a preview changes nothing');
+
+  assert.deepEqual(store.importDrafts(backup), { added: 1, updated: 1, same: 1 });
+  assert.deepEqual(
+    store.state.drafts.map((x) => [x.id, x.updatedAt]),
+    [
+      ['a', 30],
+      ['b', 6],
+    ],
+    'dates come back as they were, and the blank draft is gone',
+  );
+  assert.deepEqual(removed, ['blank']);
+  assert.notEqual(store.state.activeId, 'blank');
+  await store.flush();
+  assert.deepEqual(written.map((x) => x.id).sort(), ['a', 'b']);
+});
+
+test('a dropped file comes in dated by the file, never in the future', async () => {
+  const store = createStore(disk([draft({})]).store, noPrefs, 'system');
+  await store.load(() => '');
+  store.create('from last week', 1000);
+  assert.equal(store.active()?.updatedAt, 1000);
+  store.create('from the future', Date.now() + 1e9);
+  assert.ok(store.active()!.updatedAt <= Date.now());
+});
+
+test('settings and search take turns over the editor', async () => {
+  const store = createStore(disk([draft({})]).store, noPrefs, 'system');
+  await store.load(() => '');
+  store.setSettings(true);
+  store.setSearch(true);
+  assert.equal(store.state.settingsOpen, false);
+  store.setSettings(true);
+  assert.equal(store.state.searchOpen, false);
+});
+
+test('a new draft asked for on an empty one is that same draft', async () => {
+  const store = createStore(disk([draft({})]).store, noPrefs, 'system');
+  await store.load(() => '');
+  store.create();
+  const blank = store.state.activeId;
+  store.create();
+  store.create();
+  assert.equal(store.state.activeId, blank);
+  assert.equal(store.state.drafts.length, 2, 'one blank page, not three');
+});
+
+test('leaving an empty draft takes it away', async () => {
+  const removed: string[] = [];
+  const { store: d } = disk([draft({})]);
+  d.remove = async (id) => void removed.push(id);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+  store.create();
+  const blank = store.state.activeId!;
+  store.open('stored');
+  assert.deepEqual(
+    store.state.drafts.map((x) => x.id),
+    ['stored'],
+  );
+  await Promise.resolve();
+  assert.deepEqual(removed, [blank]);
+
+  // A file dropped on an empty draft takes its place too.
+  store.create();
+  store.create('# from a file');
+  assert.equal(store.state.drafts.length, 2);
+});
+
+test('the draft being written moves to the top of the rail', async () => {
+  const store = createStore(
+    disk([draft({ id: 'new', updatedAt: 20 }), draft({ id: 'old', updatedAt: 10 })])
+      .store,
+    noPrefs,
+    'system',
+  );
+  await store.load(() => '');
+  store.open('old');
+  store.write('edited just now', 15);
+  assert.deepEqual(
+    store.state.drafts.map((x) => x.id),
+    ['old', 'new'],
+  );
+});
+
+test('empty drafts left on the disk are cleared at boot, but the open one stays', async () => {
+  const removed: string[] = [];
+  const { store: d } = disk([
+    draft({ id: 'blank-open', text: '', updatedAt: 30 }),
+    draft({ id: 'blank-old', text: '  \n', updatedAt: 20 }),
+    draft({ id: 'kept', text: 'words', updatedAt: 10 }),
+  ]);
+  d.remove = async (id) => void removed.push(id);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+  assert.deepEqual(
+    store.state.drafts.map((x) => x.id),
+    ['blank-open', 'kept'],
+  );
+  assert.deepEqual(removed, ['blank-old']);
+});
+
+test('a blank draft swept by another tab stays where it is being typed into', async () => {
+  const tab = channel();
+  const stored = () => [draft({ id: 'kept', text: 'kept', updatedAt: 1 })];
+  const a = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  const b = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+  a.create();
+  await a.flush();
+  const id = a.state.activeId!;
+  assert.ok(
+    b.state.drafts.some((d) => d.id === id),
+    'the blank reached the other tab',
+  );
+
+  // Typed here, not yet saved, when the other tab restores and sweeps blanks.
+  a.write('typed here', 10);
+  b.importDrafts([draft({ id: 'restored', text: 'restored', updatedAt: 5 })]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(a.state.activeId, id);
+  assert.equal(a.active()?.text, 'typed here');
+  await a.flush();
+  assert.equal(b.state.drafts.find((d) => d.id === id)?.text, 'typed here');
+});
+
+test('the open blank page is not taken away by another tab sweeping blanks', async () => {
+  const tab = channel();
+  const stored = () => [draft({ id: 'kept', text: 'kept', updatedAt: 1 })];
+  const a = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  const b = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+  a.create();
+  await a.flush();
+  const id = a.state.activeId!;
+
+  b.importDrafts([draft({ id: 'restored', text: 'restored', updatedAt: 5 })]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(a.state.activeId, id);
+});
+
+test('when another tab deletes the last draft, its blank replaces the one here', async () => {
+  const tab = channel();
+  const stored = () => [draft({ id: 'only', text: 'only', updatedAt: 1 })];
+  const a = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  const b = createStore(disk(stored()).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+
+  await a.remove();
+  await a.flush();
+
+  assert.deepEqual(
+    b.state.drafts.map((d) => d.id),
+    [a.state.activeId],
+  );
+  assert.equal(b.state.activeId, a.state.activeId);
+});
+
+test('asking for a blank draft on a blank page makes none', async () => {
+  const store = createStore(disk([]).store, noPrefs, 'system');
+  await store.load(() => '');
+  assert.equal(store.create(), false);
+  assert.equal(store.create('text'), true);
+  assert.deepEqual(
+    store.state.drafts.map((d) => d.text),
+    ['text'],
+  );
+});
+
+test('an edit is newer than its draft even when the draft is dated ahead', async () => {
+  const ahead = Date.now() + 86400000;
+  const store = createStore(disk([draft({ updatedAt: ahead })]).store, noPrefs, 'system');
+  await store.load(() => '');
+  store.write('edited', 6);
+  assert.ok(store.active()!.updatedAt > ahead);
 });

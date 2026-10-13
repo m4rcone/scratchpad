@@ -15,6 +15,7 @@ import math from '@bytemd/plugin-math';
 import mermaid from '@bytemd/plugin-mermaid';
 import { imagePlaceholders } from './images.ts';
 import type { HastNode } from './images.ts';
+import { enableTaskBoxes } from './tasks.ts';
 
 // KaTeX's own stylesheet. The maths engine itself is behind a dynamic import
 // inside the plugin, so it only loads when a draft actually contains maths.
@@ -24,6 +25,12 @@ import 'katex/dist/katex.min.css';
 const noRemoteImages: BytemdPlugin = {
   rehype: (processor) =>
     processor.use(() => (tree: unknown) => imagePlaceholders(tree as HastNode)),
+};
+
+/** See `tasks.ts`: task boxes that tick, written back into the text. */
+const taskBoxes: BytemdPlugin = {
+  rehype: (processor) =>
+    processor.use(() => (tree: unknown) => enableTaskBoxes(tree as HastNode)),
 };
 
 export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
@@ -37,5 +44,6 @@ export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
     breaks(),
     gemoji(),
     noRemoteImages,
+    taskBoxes,
   ];
 }

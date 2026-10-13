@@ -25,6 +25,11 @@ export interface Draft {
 export interface DraftStore {
   /** Every draft, newest change first. */
   all(): Promise<Draft[]>;
+  /**
+   * Writes the draft, unless the disk already holds a newer change to it:
+   * a tab saving only its caret must not put its older text back over the
+   * text another tab has just written.
+   */
   put(draft: Draft): Promise<void>;
   remove(id: string): Promise<void>;
 }
@@ -39,9 +44,31 @@ export interface Prefs {
    * The service worker sets it; the page clears it as soon as it has read it.
    */
   whatsNew: string | null;
+  /** When every draft was last backed up into a `.zip`; `null` for never. */
+  lastBackup: number | null;
 }
 
 export interface PrefsStore {
   read(): Promise<Partial<Prefs>>;
   write(prefs: Partial<Prefs>): Promise<void>;
+}
+
+/**
+ * What one scratchpad tab tells the others. The toolbar reuses its tab, but a
+ * duplicated tab or a pasted address still makes two, and each would otherwise
+ * write its own stale copy over the other's newer text.
+ */
+export type DraftEvent =
+  | { type: 'put'; draft: Draft }
+  /**
+   * `ifEmpty` marks a draft cleared away for being empty rather than deleted
+   * by the writer. Another tab may already be typing into it, so there it
+   * goes only if it is still empty there too.
+   */
+  | { type: 'remove'; id: string; ifEmpty?: boolean };
+
+export interface DraftSync {
+  /** Sent once the change is on the disk, so a reload never undoes it. */
+  publish(event: DraftEvent): void;
+  subscribe(handler: (event: DraftEvent) => void): void;
 }

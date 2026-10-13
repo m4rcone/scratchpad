@@ -15,12 +15,14 @@ them — even a remote image in a draft is not loaded.
 Everything stays in your Chrome profile:
 
 - **Drafts**, in the extension's IndexedDB.
-- **Preferences** — the theme and the open draft — in `chrome.storage.local`.
+- **Preferences** — the theme, the open draft and when you last made a
+  backup — in `chrome.storage.local`.
 - **A copy of the draft being edited**, in `localStorage`, so the last
   keystroke survives a tab closed mid-save. It is cleared on the next open.
 
 Nothing is synced or readable by websites. Removing the extension deletes it
-all.
+all. Backups and Markdown exports are files your browser saves when you ask
+for them; the extension does not send them anywhere.
 
 ## Permissions
 

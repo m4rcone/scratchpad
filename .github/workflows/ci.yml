@@ -40,6 +40,10 @@ jobs:
       - name: Check the manifest made it into dist
         run: test -f dist/manifest.json && test -f dist/pad/index.html && test -f dist/background.js
 
+      # The release packs with this script; a broken one is found here first.
+      - name: Package
+        run: node scripts/package.mjs
+
       # The release workflow refuses a tag whose versions disagree; catching it
       # here means finding out on the PR, not on the tag.
       - name: Check both manifests carry the same version

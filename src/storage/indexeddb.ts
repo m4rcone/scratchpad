@@ -42,7 +42,21 @@ function run<T>(
 
 export function indexedDbStore(): DraftStore {
   let db: Promise<IDBDatabase> | null = null;
-  const database = () => (db ??= openDatabase());
+  // A failed open is not kept: the store's retry would otherwise be handed
+  // the same rejection forever, and the footer would say "not saved" for the
+  // rest of the session even once the disk is back. A connection Chrome
+  // closes under the page (storage cleared, disk gone) is dropped the same way.
+  const database = () =>
+    (db ??= openDatabase().then(
+      (opened) => {
+        opened.onclose = () => (db = null);
+        return opened;
+      },
+      (error: unknown) => {
+        db = null;
+        throw error;
+      },
+    ));
 
   return {
     async all() {
@@ -52,7 +66,17 @@ export function indexedDbStore(): DraftStore {
       return drafts.sort((a, b) => b.updatedAt - a.updatedAt);
     },
     async put(draft) {
-      await run(await database(), 'readwrite', (store) => store.put(draft));
+      // Copied now: the draft is one mutable object, and the write below
+      // happens only once the read has answered.
+      const copy = { ...draft };
+      await run(await database(), 'readwrite', (store) => {
+        const read = store.get(copy.id);
+        read.onsuccess = () => {
+          const stored = read.result as Draft | undefined;
+          if (!stored || stored.updatedAt <= copy.updatedAt) store.put(copy);
+        };
+        return read;
+      });
     },
     async remove(id) {
       await run(await database(), 'readwrite', (store) => store.delete(id));

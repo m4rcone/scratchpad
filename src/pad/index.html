@@ -29,14 +29,22 @@
         <div class="column">
           <header class="topbar" id="topbar">
             <button type="button" class="topbar__action" data-action="rail"></button>
-            <button type="button" class="topbar__action" data-action="mode"></button>
           </header>
           <div class="editor" id="editor"></div>
+          <div
+            class="find"
+            id="find"
+            role="search"
+            aria-label="find in this draft"
+            hidden
+          ></div>
+          <div class="hints" id="hints" aria-hidden="true" hidden></div>
           <footer class="footer" id="footer"></footer>
         </div>
       </main>
 
       <section class="search" id="search" hidden aria-label="search drafts"></section>
+      <section class="settings" id="settings" hidden aria-label="settings"></section>
     </div>
 
     <script type="module" src="./main.ts"></script>

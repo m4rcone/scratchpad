@@ -1,11 +1,14 @@
 /**
- * The ⌘K panel: filter by content, arrows to move, enter to open. The input
+ * The ⌘⇧F panel: filter by content, arrows to move, enter to open. The input
  * is created once and kept, so the caret, the IME and a mid-word edit survive
  * every repaint; only the count and the result rows are redrawn, and moving
  * the cursor just moves a class.
+ *
+ * To a screen reader it is a combobox over a listbox: focus stays in the
+ * input, and `aria-activedescendant` names the row the arrows are on.
  */
 import type { State } from './store.ts';
-import { escapeHtml } from './html.ts';
+import { escapeHtml, keyHints, markMatches, withKey } from './html.ts';
 import { matches, snippetOf, timeLabel, titleOf } from './model.ts';
 import { strings } from './strings.ts';
 import type { Draft } from '../storage/types.ts';
@@ -27,14 +30,16 @@ export function createSearch(root: HTMLElement): Search {
       <div class="search__row">
         <span class="search__slash">/</span>
         <input class="search__input" type="text" spellcheck="false" autocomplete="off"
-               placeholder="${strings.searchPlaceholder}" />
+               placeholder="${strings.searchPlaceholder}" aria-label="${strings.searchPlaceholder}"
+               role="combobox" aria-expanded="true" aria-autocomplete="list"
+               aria-controls="search-results" />
       </div>
       <div class="search__meta">
-        <span class="search__count"></span>
-        <span class="search__help">${strings.searchHelp}</span>
-        <button type="button" class="search__close" data-action="close">${strings.close}</button>
+        <span class="search__count" aria-live="polite"></span>
+        <span class="search__help">${keyHints(strings.searchKeysHelp)}</span>
+        <button type="button" class="search__close" data-action="close">${withKey(strings.escKey, strings.close)}</button>
       </div>
-      <div class="search__results"></div>
+      <div class="search__results" id="search-results" role="listbox" aria-label="${strings.searchPlaceholder}"></div>
     </div>`;
 
   const input = root.querySelector<HTMLInputElement>('.search__input')!;
@@ -53,27 +58,32 @@ export function createSearch(root: HTMLElement): Search {
           (
             draft,
             index,
-          ) => `<button type="button" class="result" data-id="${draft.id}" data-index="${index}">
+          ) => `<button type="button" class="result" id="result-${escapeHtml(draft.id)}" role="option" aria-selected="false" data-id="${escapeHtml(draft.id)}" data-index="${index}">
             <span class="result__head">
-              <span class="result__title">${escapeHtml(titleOf(draft.text) || strings.untitled)}</span>
+              <span class="result__title">${markMatches(titleOf(draft.text) || strings.untitled, query)}</span>
               <span class="result__time">${escapeHtml(timeLabel(draft.updatedAt))}</span>
             </span>
-            <span class="result__snippet">${escapeHtml(snippetOf(draft.text, query))}</span>
+            <span class="result__snippet">${markMatches(snippetOf(draft.text, query), query)}</span>
           </button>`,
         )
         .join('');
-      const html = rows || `<div class="search__empty">${strings.searchEmpty}</div>`;
+      const html =
+        rows ||
+        `<div class="search__empty" role="presentation">${strings.searchEmpty}</div>`;
       if (html !== lastRows) {
         lastRows = html;
         list.innerHTML = html;
       }
 
       list.querySelectorAll<HTMLElement>('.result').forEach((row, index) => {
-        row.classList.toggle('is-active', index === state.cursor);
+        const on = index === state.cursor;
+        row.classList.toggle('is-active', on);
+        row.setAttribute('aria-selected', String(on));
       });
-      list
-        .querySelector<HTMLElement>('.result.is-active')
-        ?.scrollIntoView({ block: 'nearest' });
+      const active = list.querySelector<HTMLElement>('.result.is-active');
+      if (active) input.setAttribute('aria-activedescendant', active.id);
+      else input.removeAttribute('aria-activedescendant');
+      active?.scrollIntoView({ block: 'nearest' });
     },
     focus: () => input.focus(),
   };
