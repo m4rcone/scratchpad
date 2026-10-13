@@ -10,16 +10,31 @@
 import 'bytemd/dist/index.css';
 import './bytemd.css';
 
+import {
+  backupName,
+  backupStatus,
+  draftsFromArchive,
+  exportName,
+  markdownEntries,
+  readBackup,
+  writeBackup,
+} from '../app/backup.ts';
 import { createEditor } from '../app/editor.ts';
+import logo from '../app/logo.svg?raw';
+import { createFind } from '../app/find.ts';
 import { createFooter } from '../app/footer.ts';
 import { createRail } from '../app/rail.ts';
 import { createSearch, searchResults } from '../app/search.ts';
+import { createSettings } from '../app/settings.ts';
+import type { PendingRestore } from '../app/settings.ts';
 import { createStore } from '../app/store.ts';
 import type { State } from '../app/store.ts';
-import { isTextFile, slugOf, titleOf } from '../app/model.ts';
-import { isMod } from '../app/platform.ts';
+import { isArchive, isBackupFile, isTextFile, slugOf, titleOf } from '../app/model.ts';
+import { isMod, isTouch, scrollbarWidth, shortcutKey } from '../app/platform.ts';
 import { strings } from '../app/strings.ts';
 import { applyTheme, bootTheme, effectiveTheme, systemTheme } from '../app/theme.ts';
+import { readZip, writeZip } from '../app/zip.ts';
+import { broadcastSync } from '../storage/broadcast.ts';
 import { indexedDbStore } from '../storage/indexeddb.ts';
 import { prefsStore } from '../storage/prefs.ts';
 import type { Draft } from '../storage/types.ts';
@@ -31,6 +46,9 @@ const railEl = $('rail');
 const footerEl = $('footer');
 const searchEl = $('search');
 const editorEl = $('editor');
+const findEl = $('find');
+const hintsEl = $('hints');
+const settingsEl = $('settings');
 const shellEl = document.querySelector<HTMLElement>('.shell')!;
 
 // A pinned theme is known synchronously, so the first frame is already right —
@@ -38,41 +56,137 @@ const shellEl = document.querySelector<HTMLElement>('.shell')!;
 const theme = bootTheme();
 applyTheme(theme);
 
-const store = createStore(indexedDbStore(), prefsStore(), theme);
+const store = createStore(indexedDbStore(), prefsStore(), theme, broadcastSync());
 const editor = createEditor(editorEl, store.state.mode, effectiveTheme(theme));
 editor.focus();
+const find = createFind(findEl, editor, closeFind, (message) => store.flash(message));
+
+/**
+ * The toolbar and the footer float over the text, translucent, so the writing
+ * shows through as it scrolls under them. The text is padded by their heights
+ * — measured, since the toolbar takes two rows on a phone — so its first and
+ * last lines still clear them, and the caret is kept that far from either
+ * edge while typing.
+ */
+const columnEl = document.querySelector<HTMLElement>('.column')!;
+const toolbarEl = editorEl.querySelector<HTMLElement>('.bytemd-toolbar');
+const measureBars = () => {
+  const top = toolbarEl?.offsetHeight ?? 44;
+  const bottom = footerEl.offsetHeight;
+  columnEl.style.setProperty('--toolbar-h', `${top}px`);
+  columnEl.style.setProperty('--footer-h', `${bottom}px`);
+  editor.setCaretMargin(Math.max(top, bottom) + 8);
+};
+const barObserver = new ResizeObserver(measureBars);
+barObserver.observe(footerEl);
+if (toolbarEl) barObserver.observe(toolbarEl);
+
+// The find panel floats over the top of the text as well. Where it ends is
+// measured so the text can start below it while it is open: the first line,
+// a title most often, would otherwise sit under it with nowhere to scroll.
+new ResizeObserver(() => {
+  if (findEl.hidden) return;
+  columnEl.style.setProperty(
+    '--find-bottom',
+    `${findEl.offsetTop + findEl.offsetHeight}px`,
+  );
+}).observe(findEl);
+
+/**
+ * Scrollbars that take a column of their own (Windows, Linux) would run under
+ * the floating bars, their ends and arrows hidden. Where there are such
+ * scrollbars the stylesheet thins them and keeps the bars off them; the
+ * width is measured after thinning, since that is the width they keep.
+ */
+if (scrollbarWidth() > 0) {
+  document.documentElement.dataset.scrollbars = 'classic';
+  document.documentElement.style.setProperty('--scrollbar-w', `${scrollbarWidth()}px`);
+}
 
 const paintRail = createRail(railEl);
-const paintFooter = createFooter(footerEl);
+const footer = createFooter(footerEl);
 const search = createSearch(searchEl);
+// Outside the extension (vite dev) there is no manifest to read a version from.
+const version =
+  typeof chrome !== 'undefined' ? (chrome.runtime?.getManifest?.().version ?? '') : '';
+const storeId = typeof chrome !== 'undefined' ? (chrome.runtime?.id ?? '') : '';
+const paintSettings = createSettings(settingsEl, version, storeId);
+/** A backup that was read and is waiting for the writer to say "restore". */
+let pendingRestore: PendingRestore | null = null;
+/**
+ * One file picker for the settings' two buttons, kept outside the panel's
+ * markup, which is rebuilt; what it accepts is set by the button that opens it.
+ */
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.hidden = true;
+document.body.append(fileInput);
 const railButton = topbarEl.querySelector<HTMLElement>('[data-action="rail"]')!;
-const modeButton = topbarEl.querySelector<HTMLElement>('[data-action="mode"]')!;
-railButton.textContent = strings.draftsButton;
+/** What the drafts button flags, so it is drawn again only when that changes. */
+let railFlag: 'due' | 'news' | '' | null = null;
+/**
+ * On a narrow window the rail, and the flags at its foot, are behind the
+ * drafts button; it carries the same dot, so they are not out of sight.
+ */
+function paintRailButton(state: State): void {
+  const flag = backupStatus(state.lastBackup, state.drafts)?.stale
+    ? 'due'
+    : state.whatsNew && !state.settingsOpen
+      ? 'news'
+      : '';
+  if (flag === railFlag) return;
+  railFlag = flag;
+  const spoken =
+    flag === 'due' ? strings.backupDue : flag === 'news' ? strings.newsFlag : '';
+  railButton.innerHTML = flag
+    ? `${strings.draftsButton}<span class="topbar__flag is-${flag}" aria-hidden="true"></span><span class="visually-hidden">, ${spoken}</span>`
+    : strings.draftsButton;
+}
+// On a narrow window the rail, and the logo at its head, are tucked away; the
+// top bar carries the logo instead, in the same dimmed ink.
+topbarEl.insertAdjacentHTML(
+  'afterbegin',
+  `<span class="topbar__logo" aria-hidden="true">${logo}</span>`,
+);
 
 let results: Draft[] = [];
 let lastRenderedId: string | null = null;
 let lastMode = store.state.mode;
 let lastTheme = effectiveTheme(theme);
 let searchWasOpen = false;
+let lastReplaced = store.state.replaced;
+let findWasOpen = false;
+let settingsWasOpen = false;
 
 function paint(state: State): void {
   const active = store.active();
   const switched = !!active && active.id !== lastRenderedId;
 
-  // Only reset the document when the draft itself changed: rewriting it on
-  // every keystroke would fight the caret and wipe CodeMirror's undo history.
-  if (active && active.id !== lastRenderedId) {
+  // Only reset the document when the draft itself changed — another draft, or
+  // this one rewritten by another tab or a restore: rewriting it on every
+  // keystroke would fight the caret and wipe CodeMirror's undo history.
+  if (active && (switched || state.replaced !== lastReplaced)) {
     editor.setText(active.text, active.caret);
     lastRenderedId = active.id;
   }
+  lastReplaced = state.replaced;
   if (!active && lastRenderedId) {
     editor.setText('');
     lastRenderedId = null;
   }
 
   searchEl.hidden = !state.searchOpen;
+  settingsEl.hidden = !state.settingsOpen;
+  if (!state.settingsOpen) pendingRestore = null;
+  paintSettings(state, pendingRestore);
+  // Into the panel with the keyboard, so tab and escape work from the start.
+  if (state.settingsOpen && !settingsWasOpen) {
+    settingsEl.querySelector<HTMLElement>('[data-action="backup"]')?.focus();
+  }
+  settingsWasOpen = state.settingsOpen;
+  const covered = state.searchOpen || state.settingsOpen;
   const wasHidden = editorEl.hidden;
-  editorEl.hidden = state.searchOpen;
+  editorEl.hidden = covered;
   // Coming back from search, the editor has just regained a size. Anything
   // `setText` wrote above landed while it had none, so CodeMirror is asked to
   // measure again now — synchronously, so the draft is right on the same frame
@@ -85,6 +199,11 @@ function paint(state: State): void {
     if (!searchWasOpen) search.focus();
   }
   searchWasOpen = state.searchOpen;
+
+  findEl.hidden = !state.findOpen || covered;
+  if (state.findOpen && !covered) find.refresh();
+  if (findWasOpen && !state.findOpen) find.close();
+  findWasOpen = state.findOpen;
 
   const modeChanged = state.mode !== lastMode;
   if (modeChanged) {
@@ -104,14 +223,37 @@ function paint(state: State): void {
     editor.setTheme(nowTheme);
   }
 
-  // From either view, the top bar's button is the way back to the text.
-  modeButton.textContent = state.mode === 'write' ? strings.splitView : strings.writeOnly;
   // The tab strip and the history show which draft this is.
   const title = active ? titleOf(active.text) : '';
-  document.title = title ? `${title} · ${strings.appName}` : strings.appName;
+  document.title = title ? `${title} – ${strings.appName}` : strings.appName;
   paintRail(state);
-  paintFooter(state, editor.getText());
+  paintRailButton(state);
+  // An empty draft says what can be done with it; the first keystroke, or
+  // anything else on screen, sends the hints away.
+  hintsEl.hidden =
+    isTouch ||
+    !state.loaded ||
+    !active ||
+    !!active.text ||
+    state.mode === 'read' ||
+    covered ||
+    state.findOpen;
+  footer.paint(state, editor.getText());
 }
+
+hintsEl.innerHTML = `
+  <div class="hints__keys">
+    ${strings.emptyKeys.map(([keys, label]) => `<kbd>${keys}</kbd><span>${label}</span>`).join('')}
+  </div>`;
+
+// What a file dragged over the page will become, said while it is still in
+// the air. It is painted over everything but takes no pointer events, so the
+// drop still lands on the window listeners below.
+const dropHint = document.createElement('div');
+dropHint.className = 'drop-hint';
+dropHint.setAttribute('aria-hidden', 'true');
+dropHint.innerHTML = `<div><strong>${strings.dropTitle}</strong>${strings.dropDetail.map((line) => `<span>${line}</span>`).join('')}</div>`;
+shellEl.append(dropHint);
 
 store.subscribe(paint);
 
@@ -121,31 +263,144 @@ editor.onCaret((caret) => store.moveCaret(caret));
 // newline again, not confirm.
 editor.onFocus(() => store.cancelDelete());
 editor.onReadScroll((fraction) => store.moveScroll(fraction));
-editor.onToggleView(toggleMode);
+editor.onView((mode) => {
+  store.setMode(mode);
+  if (mode === 'write') editor.focus();
+});
 
 // ---------- actions ----------
 
 async function copyAll(): Promise<void> {
   try {
     await navigator.clipboard.writeText(editor.getText());
-    store.flash(strings.copied);
+    footer.acknowledge('copy', strings.copied);
   } catch {
     // Clipboard denied: select the draft instead, so ⌘C is one key away.
     editor.selectAll();
   }
 }
 
-function exportDraft(): void {
-  const text = editor.getText();
-  const name = `${slugOf(text)}.md`;
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+function download(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = name;
   link.click();
   // Revoking in the same tick can cancel the download it just started.
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportDraft(): void {
+  const text = editor.getText();
+  const name = `${slugOf(text)}.md`;
+  download(new Blob([text], { type: 'text/markdown' }), name);
+  footer.acknowledge('export', strings.exported(name));
   store.flash(strings.exported(name));
+}
+
+const hasText = () => store.state.drafts.some((draft) => draft.text.trim());
+
+interface SaveFilePicker {
+  (options: {
+    suggestedName: string;
+    types: { description: string; accept: Record<string, string[]> }[];
+  }): Promise<{
+    createWritable(): Promise<{
+      write(data: Blob): Promise<void>;
+      close(): Promise<void>;
+    }>;
+  }>;
+}
+
+/**
+ * Saves a backup through Chrome's save dialog, which — unlike a download —
+ * says whether the file was written: a dialog closed without saving is not a
+ * backup, and must not quiet the reminder. Where there is no such dialog, the
+ * download is the only way, and it says nothing back.
+ */
+async function saveBackup(blob: Blob, name: string): Promise<boolean> {
+  const picker = (window as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
+  if (!picker) {
+    download(blob, name);
+    return true;
+  }
+  let handle: Awaited<ReturnType<SaveFilePicker>>;
+  try {
+    handle = await picker.call(window, {
+      suggestedName: name,
+      types: [
+        {
+          description: strings.backupFileType,
+          accept: { 'application/json': ['.json'] },
+        },
+      ],
+    });
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') return false;
+    // Refused for some other reason (a policy, a sandbox): download instead.
+    download(blob, name);
+    return true;
+  }
+  try {
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every draft, whole, in one `.json`; see `backup.ts`. */
+async function backupAll(): Promise<void> {
+  if (!hasText()) {
+    store.flash(strings.backupEmpty);
+    return;
+  }
+  const name = backupName();
+  const blob = new Blob([writeBackup(store.state.drafts)], { type: 'application/json' });
+  if (!(await saveBackup(blob, name))) {
+    store.flash(strings.backupCancelled);
+    return;
+  }
+  store.markBackedUp();
+  store.flash(strings.backedUp(name));
+}
+
+/** Every draft as a `.md`, in one `.zip`, for reading elsewhere. */
+function exportAll(): void {
+  if (!hasText()) {
+    store.flash(strings.backupEmpty);
+    return;
+  }
+  const name = exportName();
+  const bytes = writeZip(markdownEntries(store.state.drafts));
+  download(new Blob([new Uint8Array(bytes)], { type: 'application/zip' }), name);
+  store.flash(strings.exportedAll(name));
+}
+
+function pickFiles(accept: string, multiple: boolean): void {
+  fileInput.accept = accept;
+  fileInput.multiple = multiple;
+  fileInput.click();
+}
+
+function confirmRestore(): void {
+  if (!pendingRestore) return;
+  const { drafts } = pendingRestore.backup;
+  pendingRestore = null;
+  const outcome = store.importDrafts(drafts);
+  store.flash(strings.restored(outcome.added, outcome.updated));
+}
+
+function cancelRestore(): void {
+  pendingRestore = null;
+  paint(store.state);
+}
+
+function closeSettings(): void {
+  store.setSettings(false);
+  editor.focus();
 }
 
 function deleteDraft(): void {
@@ -161,24 +416,81 @@ function undoDelete(): void {
 }
 
 /**
- * Each dropped `.md` or `.txt` becomes a draft of its own; the last one is left
- * open. Nothing else is taken, and the footer says so rather than leaving the
- * writer to wonder why the drop did nothing.
+ * A backup `.json` is read and shown in the settings, where the writer sees
+ * what it would change and says yes; it is never applied on the drop alone.
+ * Only the first one counts — two backups at once have no sensible order.
  */
-async function openFiles(files: File[]): Promise<void> {
-  const accepted = files.filter((file) => isTextFile(file.name));
-  if (!accepted.length) {
-    store.flash(strings.dropOnly);
-    return;
+async function openBackup(file: File): Promise<boolean> {
+  try {
+    const backup = readBackup(await file.text());
+    pendingRestore = { backup, preview: store.previewImport(backup.drafts) };
+  } catch {
+    store.flash(strings.restoreFailed);
+    return false;
   }
+  if (store.state.settingsOpen) paint(store.state);
+  else store.setSettings(true);
+  // The question on screen is "restore?", so that is where the keyboard goes.
+  settingsEl
+    .querySelector<HTMLElement>(
+      '[data-action="restore-confirm"], [data-action="restore-cancel"]',
+    )
+    ?.focus();
+  return true;
+}
+
+/**
+ * Where files come from decides what they may be. Dropped on the page, only a
+ * `.md` or `.txt` is taken, each becoming a draft of its own, dated by the
+ * file. A `.zip` of notes and a backup bring in many drafts at once, so they
+ * come in only through the settings' own buttons — `open` and `restore` — and
+ * a drop of either is turned away with a word on where to take it. Nothing
+ * is taken silently: the footer says what happened.
+ */
+async function openFiles(
+  files: File[],
+  from: 'drop' | 'open' | 'restore',
+): Promise<void> {
   // A drop in the first instants must not land in drafts the load then replaces.
   await booted;
-  const texts = await Promise.all(accepted.map((file) => file.text()));
-  for (const text of texts) store.create(text.replace(/\r\n?/g, '\n'));
-  editor.focus();
-  store.flash(
-    accepted.length < files.length ? strings.dropOnly : strings.dropped(texts.length),
+  const backup = files.find((file) => isBackupFile(file.name));
+  if (backup && from === 'restore') {
+    await openBackup(backup);
+    return;
+  }
+  const accepted = files.filter(
+    (file) => isTextFile(file.name) || (from === 'open' && isArchive(file.name)),
   );
+  if (!accepted.length) {
+    const many = files.some((file) => isBackupFile(file.name) || isArchive(file.name));
+    store.flash(many ? strings.dropToSettings : strings.dropOnly);
+    return;
+  }
+  let opened = 0;
+  /** Notes in a `.zip` whose text is already here, and so not opened again. */
+  let already = 0;
+  let failed = false;
+  for (const file of accepted) {
+    if (isArchive(file.name)) {
+      try {
+        const entries = await readZip(new Uint8Array(await file.arrayBuffer()));
+        const outcome = store.importDrafts(draftsFromArchive(entries));
+        opened += outcome.added + outcome.updated;
+        already += outcome.same;
+      } catch {
+        failed = true;
+      }
+    } else {
+      // An empty file on an empty page makes no new draft: there is one.
+      const text = (await file.text()).replace(/\r\n?/g, '\n');
+      if (store.create(text, file.lastModified)) opened += 1;
+    }
+  }
+  if (opened) editor.focus();
+  if (failed) store.flash(strings.zipFailed);
+  else if (accepted.length < files.length) store.flash(strings.dropOnly);
+  else if (opened) store.flash(strings.dropped(opened));
+  else store.flash(already ? strings.droppedAlready : strings.droppedNothing);
 }
 
 /**
@@ -217,6 +529,20 @@ function closeSearch(): void {
   editor.focus();
 }
 
+/** Reading has no source to search, so there `⌘F` stays Chrome's. */
+function openFind(): boolean {
+  const { mode, searchOpen, settingsOpen } = store.state;
+  if (mode === 'read' || searchOpen || settingsOpen) return false;
+  store.setFind(true);
+  find.open();
+  return true;
+}
+
+function closeFind(): void {
+  store.setFind(false);
+  editor.focus();
+}
+
 // ---------- events ----------
 
 const actionOf = (event: Event): string | undefined =>
@@ -224,11 +550,9 @@ const actionOf = (event: Event): string | undefined =>
 
 topbarEl.addEventListener('click', (event) => {
   const action = actionOf(event);
+  // The view switch is on the toolbar at every width now, so the top bar only
+  // opens the drafts.
   if (action === 'rail') store.setRail(!store.state.railOpen);
-  else if (action === 'mode') {
-    if (store.state.mode === 'write') toggleMode('split');
-    else backToWriting();
-  }
 });
 
 railEl.addEventListener('click', (event) => {
@@ -239,18 +563,34 @@ railEl.addEventListener('click', (event) => {
   if (target.dataset.id) openDraft(target.dataset.id);
   else if (target.dataset.action === 'new') createDraft();
   else if (target.dataset.action === 'search') store.setSearch(true);
+  else if (target.dataset.action === 'settings') store.setSettings(true);
   else if (target.dataset.action === 'close') store.setRail(false);
 });
 
+/**
+ * Where the caret goes after a footer button. A click — `detail` counts the
+ * clicks — hands it back to the text, so copying or switching the theme with
+ * the mouse never leaves the next keystroke typed into a button. Enter or
+ * space on a focused button leaves it there, where a keyboard user is
+ * tabbing. Delete is the exception on its first press: focus stays put, so
+ * enter can confirm — the editor taking focus would cancel it.
+ */
 footerEl.addEventListener('click', (event) => {
   const action = actionOf(event);
   if (action === 'copy') void copyAll();
   else if (action === 'export') exportDraft();
   else if (action === 'delete') deleteDraft();
   else if (action === 'undo') undoDelete();
-  // The link opens the changelog on its own; the footer only lets it go.
-  else if (action === 'news') store.dismissNews();
   else if (action === 'theme') toggleTheme();
+  if (event.detail > 0 && action !== 'delete') editor.focus();
+});
+
+// Leaving the delete button for another control is leaving the question
+// unanswered: the button stops waiting for its second press. Focus going
+// nowhere (`relatedTarget` null, a click on bare page) keeps it waiting.
+const deleteButton = footerEl.querySelector<HTMLElement>('[data-action="delete"]')!;
+deleteButton.addEventListener('focusout', (event) => {
+  if (event.relatedTarget) store.cancelDelete();
 });
 
 searchEl.addEventListener('input', (event) => {
@@ -260,8 +600,35 @@ searchEl.addEventListener('input', (event) => {
 
 searchEl.addEventListener('click', (event) => {
   const id = (event.target as HTMLElement).closest<HTMLElement>('[data-id]')?.dataset.id;
+  const action = actionOf(event);
   if (id) openDraft(id);
-  else if (actionOf(event) === 'close') closeSearch();
+  else if (action === 'close') closeSearch();
+});
+
+settingsEl.addEventListener('click', (event) => {
+  const target = (event.target as HTMLElement).closest<HTMLElement>('[data-action]');
+  const action = target?.dataset.action;
+  if (action === 'close') closeSettings();
+  else if (action === 'backup') void backupAll();
+  else if (action === 'restore') pickFiles('.json,application/json', false);
+  else if (action === 'restore-confirm') confirmRestore();
+  else if (action === 'restore-cancel') cancelRestore();
+  else if (action === 'export-all') exportAll();
+  else if (action === 'open-files') pickFiles('.md,.markdown,.txt,.zip', true);
+  else if (action === 'theme') {
+    const choice = target?.dataset.themeChoice;
+    if (choice === 'system' || choice === 'light' || choice === 'dark')
+      store.setTheme(choice);
+  }
+});
+
+fileInput.addEventListener('change', () => {
+  const files = [...(fileInput.files ?? [])];
+  // Cleared, so choosing the same file again still fires `change`.
+  fileInput.value = '';
+  // The restore button is the one that asks for `.json`.
+  if (files.length)
+    void openFiles(files, fileInput.accept.includes('.json') ? 'restore' : 'open');
 });
 
 searchEl.addEventListener('mousemove', (event) => {
@@ -286,13 +653,14 @@ window
  * writes a code block, ⌘D deletes a line. Rather than race them from the
  * capture phase, the app moved to shift-chords none of them claim — ⌘⇧F,
  * ⌘⇧D, ⌘⇧A, ⌘⇧P — and CodeMirror lets those bubble up untouched. Adding a
- * shortcut means checking both keymaps first; `⌘S` survives only because the
- * `save` command CodeMirror binds it to is never defined.
+ * shortcut means checking both keymaps first; `⌘S`, `⌘F` and `⌘G` survive
+ * only because the `save`, `find` and `findNext` commands CodeMirror binds
+ * them to are never defined — loading its search addon would take them away.
  */
 window.addEventListener('keydown', (event) => {
   if (event.isComposing) return;
   const state = store.state;
-  const key = event.key.toLowerCase();
+  const key = shortcutKey(event);
 
   if (isMod(event)) {
     if (key === 'f' && event.shiftKey) {
@@ -315,6 +683,27 @@ window.addEventListener('keydown', (event) => {
     } else if (key === 's' && !event.shiftKey) {
       event.preventDefault();
       exportDraft();
+    } else if (event.code === 'Comma' && event.shiftKey) {
+      // By its key, not its character: shift turns the comma into `<` on
+      // most layouts. Plain ⌘, is Chrome's own settings on a Mac.
+      event.preventDefault();
+      if (state.settingsOpen) closeSettings();
+      else store.setSettings(true);
+    } else if (key === 'f' && !event.shiftKey) {
+      if (openFind()) event.preventDefault();
+    } else if (key === 'g' && state.findOpen && !state.searchOpen) {
+      event.preventDefault();
+      find.next(event.shiftKey ? -1 : 1);
+    }
+    return;
+  }
+
+  if (state.settingsOpen) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      // A restore waiting for an answer is the first thing escape says no to.
+      if (pendingRestore) cancelRestore();
+      else closeSettings();
     }
     return;
   }
@@ -345,11 +734,22 @@ window.addEventListener('keydown', (event) => {
 
   if (state.pendingDelete) {
     if (event.key === 'Enter') {
+      // Enter confirms only from the delete button itself, or with focus
+      // nowhere in particular. On any other control it means that control:
+      // tabbing from delete to "copy" and pressing enter must copy, not
+      // delete the draft.
+      const focused = document.activeElement;
+      if (focused !== deleteButton && focused !== document.body) {
+        store.cancelDelete();
+        return;
+      }
       event.preventDefault();
       deleteDraft();
     } else if (event.key === 'Escape') {
       event.preventDefault();
+      // Escape means "not this": back to the text, wherever focus was.
       store.cancelDelete();
+      editor.focus();
     }
     return;
   }
@@ -357,6 +757,12 @@ window.addEventListener('keydown', (event) => {
   if (state.deleted && event.key === 'Escape') {
     event.preventDefault();
     undoDelete();
+    return;
+  }
+
+  if (state.findOpen && event.key === 'Escape') {
+    event.preventDefault();
+    closeFind();
     return;
   }
 
@@ -414,7 +820,7 @@ window.addEventListener(
     event.stopPropagation();
     dragDepth = 0;
     delete shellEl.dataset.dropping;
-    void openFiles([...(event.dataTransfer?.files ?? [])]);
+    void openFiles([...(event.dataTransfer?.files ?? [])], 'drop');
   },
   true,
 );

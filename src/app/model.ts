@@ -49,6 +49,48 @@ export function slugOf(text: string): string {
   return slug || 'draft';
 }
 
+/** One character as search compares it: lowercase, without its accents. */
+const plain = (char: string) =>
+  char < '\u0080'
+    ? char.toLowerCase()
+    : char.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/**
+ * Text as search compares it — lowercase and without accents, so "titulo"
+ * finds "título" — with, for each folded character, where it came from in the
+ * original: a match found in the folded text is marked in the original one,
+ * whose lengths differ (`é` is one character, `İ` lowers to two).
+ */
+export function fold(text: string): { text: string; at: number[] } {
+  let folded = '';
+  const at: number[] = [];
+  let index = 0;
+  for (const char of text) {
+    const part = plain(char);
+    for (let k = 0; k < part.length; k++) at.push(index);
+    folded += part;
+    index += char.length;
+  }
+  // One past the end, so a match running to the last character maps too.
+  at.push(index);
+  return { text: folded, at };
+}
+
+/**
+ * The folded text alone, for a yes-or-no match: no offsets to keep. Folded a
+ * character at a time like `fold`, so the filter, the snippet and the marks
+ * all agree — lowering a whole string turns a final `Σ` into `ς`, and one
+ * character at a time into `σ`.
+ */
+function folded(text: string): string {
+  let out = '';
+  for (const char of text) out += plain(char);
+  return out;
+}
+
+/** A query as search compares it: folded, and without the spaces around it. */
+const needleOf = (query: string) => folded(query.trim());
+
 /**
  * The line under a search result. With no query it is the start of the body —
  * the title is already printed right above it, so repeating it says nothing.
@@ -62,15 +104,18 @@ export function snippetOf(text: string, query: string): string {
       .trim();
   const flat = flatten(text);
   const limit = 78;
-  if (!query) {
+  const needle = needleOf(query);
+  if (!needle) {
     const lines = text.split('\n');
     const body = flatten(
       lines.slice(lines.findIndex((line) => line.trim()) + 1).join('\n'),
     );
     return body.slice(0, limit) + (body.length > limit ? '…' : '');
   }
-  const at = flat.toLowerCase().indexOf(query.toLowerCase());
-  if (at < 0) return flat.slice(0, limit) + (flat.length > limit ? '…' : '');
+  const { text: haystack, at: from } = fold(flat);
+  const found = haystack.indexOf(needle);
+  if (found < 0) return flat.slice(0, limit) + (flat.length > limit ? '…' : '');
+  const at = from[found]!;
   const start = Math.max(0, at - 28);
   const cut = flat.slice(start, start + limit);
   return (start ? '…' : '') + cut + (start + limit < flat.length ? '…' : '');
@@ -79,6 +124,22 @@ export function snippetOf(text: string, query: string): string {
 export function wordCount(text: string): number {
   const trimmed = text.trim();
   return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
+/**
+ * A rough token count, for text headed to a model: about four characters a
+ * token, which is close for English prose and code and within reach for most
+ * other text. The footer shows it with a `~`, never as exact.
+ */
+export function tokenEstimate(text: string): number {
+  return Math.ceil(text.trim().length / 4);
+}
+
+/** Small counts as they are, then `1.9k`, then `12k`: the footer is one line. */
+export function compactCount(count: number): string {
+  if (count < 1000) return String(count);
+  if (count < 10000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `${Math.round(count / 1000)}k`;
 }
 
 /** Clock for today, weekday for this week, date beyond that. */
@@ -128,6 +189,17 @@ export function isTextFile(name: string): boolean {
   return /\.(md|markdown|txt)$/i.test(name);
 }
 
+/** A zip of notes: each text file in it opens as a draft. */
+export function isArchive(name: string): boolean {
+  return /\.zip$/i.test(name);
+}
+
+/** A backup from the settings: read, previewed, then restored. */
+export function isBackupFile(name: string): boolean {
+  return /\.json$/i.test(name);
+}
+
+/** Whether a draft holds the query, in any case and with or without accents. */
 export function matches(draft: Draft, query: string): boolean {
-  return draft.text.toLowerCase().includes(query.toLowerCase());
+  return folded(draft.text).includes(needleOf(query));
 }

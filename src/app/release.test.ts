@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isFeatureRelease, shortVersion } from './release.ts';
+import { isFeatureRelease } from './release.ts';
 
 test('a new minor or major is worth a word, a patch is not', () => {
   assert.ok(isFeatureRelease('1.0.0', '1.1.0'));
@@ -12,9 +12,4 @@ test('a new minor or major is worth a word, a patch is not', () => {
     !isFeatureRelease(undefined, '1.1.0'),
     'nor is a version Chrome did not report',
   );
-});
-
-test('the footer names a version without its patch', () => {
-  assert.equal(shortVersion('1.1.0'), '1.1');
-  assert.equal(shortVersion('2.0'), '2.0');
 });

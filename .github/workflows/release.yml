@@ -2,7 +2,8 @@ name: Release
 
 # Tag `vX.Y.Z` and this packs the extension the way the Chrome Web Store wants
 # it — a zip of the built `dist/`, without the sourcemaps, which are a local
-# debugging aid — and attaches it to the GitHub release.
+# debugging aid, packed by the same script as `npm run package` — and
+# attaches it to the GitHub release.
 on:
   push:
     tags: ['v*']
@@ -39,9 +40,7 @@ jobs:
           fi
 
       - name: Zip the unpacked extension
-        run: |
-          find dist -name '*.map' -delete
-          cd dist && zip -qr "../scratchpad-${GITHUB_REF_NAME}.zip" .
+        run: node scripts/package.mjs "scratchpad-${GITHUB_REF_NAME}.zip"
 
       # The gh CLI ships on the runner, so the release needs no third-party action.
       - name: Create the release

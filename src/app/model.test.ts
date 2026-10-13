@@ -1,11 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  compactCount,
+  fold,
   groupByDay,
+  isArchive,
+  isBackupFile,
   isTextFile,
+  matches,
   slugOf,
   snippetOf,
   titleOf,
+  tokenEstimate,
   wordCount,
 } from './model.ts';
 import type { Draft } from '../storage/types.ts';
@@ -100,4 +106,55 @@ test('only markdown and plain text files are taken in a drop', () => {
   assert.ok(!isTextFile('photo.png'));
   assert.ok(!isTextFile('md'));
   assert.ok(!isTextFile('archive.md.zip'));
+});
+
+test('tokens are estimated at four characters each, rounded up', () => {
+  assert.equal(tokenEstimate(''), 0);
+  assert.equal(tokenEstimate('   '), 0);
+  assert.equal(tokenEstimate('abcde'), 2);
+});
+
+test('counts stay short enough for the footer', () => {
+  assert.equal(compactCount(999), '999');
+  assert.equal(compactCount(1000), '1k');
+  assert.equal(compactCount(1949), '1.9k');
+  assert.equal(compactCount(12400), '12k');
+});
+
+test('a backup is a .json file; a zip of notes opens as drafts', () => {
+  assert.ok(isBackupFile('scratchpad-backup-2026-10-13.json'));
+  assert.ok(!isBackupFile('notes.md'));
+  assert.ok(isArchive('scratchpad-markdown-2026-10-12.zip'));
+  assert.ok(isArchive('NOTES.ZIP'));
+  assert.ok(!isArchive('notes.md'));
+});
+
+test('search ignores accents and case, both ways', () => {
+  assert.ok(matches(draft({ text: 'Teste de título' }), 'titulo'));
+  assert.ok(matches(draft({ text: 'teste de titulo' }), 'TÍTULO'));
+  assert.ok(matches(draft({ text: 'ação e reação' }), 'acao'));
+  assert.ok(!matches(draft({ text: 'título' }), 'titulos'));
+});
+
+test('folding keeps where each character came from', () => {
+  const { text, at } = fold('Ação');
+  assert.equal(text, 'acao');
+  assert.deepEqual(at, [0, 1, 2, 3, 4]);
+  // A decomposed accent is a character of its own in the original.
+  assert.deepEqual(fold('éx'), { text: 'ex', at: [0, 2, 3] });
+});
+
+test('the snippet centres on an accented match too', () => {
+  const text = 'a'.repeat(60) + ' título ' + 'b'.repeat(60);
+  assert.ok(snippetOf(text, 'titulo').includes('título'));
+});
+
+test('the filter, the snippet and the marks fold a query the same way', () => {
+  // Lowered whole, 'ΟΔΟΣ' ends in a final 'ς'; a character at a time, in 'σ'.
+  const text = 'a'.repeat(90) + ' ΟΔΟΣ';
+  assert.ok(matches(draft({ text }), 'ΟΔΟΣ'));
+  assert.ok(snippetOf(text, 'ΟΔΟΣ').includes('ΟΔΟΣ'));
+  // Spaces around a query are not part of it, here or in the marks.
+  assert.ok(matches(draft({ text: 'foo.' }), 'foo '));
+  assert.ok(snippetOf('b'.repeat(90) + ' foo.', 'foo ').includes('foo'));
 });

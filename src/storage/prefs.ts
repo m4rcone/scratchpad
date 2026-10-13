@@ -21,6 +21,9 @@ function sanitize(raw: unknown): Partial<Prefs> {
   if (typeof value.whatsNew === 'string' || value.whatsNew === null) {
     prefs.whatsNew = value.whatsNew as string | null;
   }
+  if (Number.isFinite(value.lastBackup) || value.lastBackup === null) {
+    prefs.lastBackup = value.lastBackup as number | null;
+  }
   return prefs;
 }
 

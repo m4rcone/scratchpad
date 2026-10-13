@@ -13,7 +13,12 @@ import type { BytemdPlugin, EditorProps } from 'bytemd';
 import type { Editor as CodeMirrorEditor } from 'codemirror';
 import { markdownPlugins } from './plugins.ts';
 import type { Mode } from './store.ts';
+import { findAll } from './find.ts';
+import { formatChord } from './platform.ts';
 import { strings } from './strings.ts';
+import { keyboardToolbar } from './toolbar.ts';
+import { collapseRepeatedMarker, outdentEmptyItem } from './lists.ts';
+import { toggleTask } from './tasks.ts';
 
 /**
  * ByteMD's own typings extend `SvelteComponentTyped`, which needs the `svelte`
@@ -47,15 +52,34 @@ export interface Editor {
   focus(): void;
   /** Selects the whole draft, for when the clipboard refuses a copy. */
   selectAll(): void;
+  /** The selection as offsets into the text; equal when it is a bare caret. */
+  selection(): { from: number; to: number };
+  /** Selects a range and scrolls it into view, without taking focus. */
+  select(from: number, to: number): void;
+  /**
+   * Tints every occurrence of `query` in the source, `null` to clear. The tint
+   * is a CodeMirror overlay, so it costs only the lines on screen.
+   */
+  highlight(query: string | null, caseSensitive: boolean): void;
+  /** Marks the one occurrence find is on, `null` to clear. */
+  markCurrent(range: { from: number; to: number } | null): void;
+  /** Replaces each range with `text`, as one step for undo. */
+  replace(ranges: { from: number; to: number }[], text: string): void;
   /** Re-measure after the host goes from hidden to visible. */
   refresh(): void;
+  /**
+   * How far from the pane's top and bottom edges the caret is kept: the
+   * toolbar and the footer float over the text, so a caret scrolled to the
+   * very edge would sit under one of them.
+   */
+  setCaretMargin(px: number): void;
   setMode(mode: Mode): void;
   setTheme(theme: 'dark' | 'light'): void;
   onInput(handler: (text: string, caret: number) => void): void;
   onCaret(handler: (caret: number) => void): void;
   onFocus(handler: () => void): void;
-  /** The view buttons on ByteMD's toolbar, which the app's mode answers to. */
-  onToggleView(handler: (mode: Exclude<Mode, 'write'>) => void): void;
+  /** The view switch on ByteMD's toolbar: a click asks for that view. */
+  onView(handler: (mode: Mode) => void): void;
   /** Scrolls the reading view to a fraction of its height; see `Draft.scroll`. */
   setReadScroll(fraction: number): void;
   /** The writer scrolling the reading view, as a fraction of its height. */
@@ -81,28 +105,130 @@ const EDITOR_MODE = {
 };
 
 /**
- * The toolbar's own icons, drawn on ByteMD's 48-unit grid with its 4-unit
- * stroke so they sit among the built-in ones: two panes side by side for the
- * split view, an eye for reading, a cup for Ko-fi.
+ * Icons drawn on ByteMD's 48-unit grid with its 4-unit stroke, so they sit
+ * among the built-in ones. The three views are words, not icons: they are the
+ * app's main switch, and `bytemd.css` draws them as one segmented control.
  */
 const svg = (body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 48 48" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
-const SPLIT_ICON = svg(
-  '<rect width="36" height="36" x="6" y="6" rx="2"/><path d="M24 6v36"/>',
-);
-const READ_ICON = svg(
-  '<path d="M4 24s7-13 20-13 20 13 20 13-7 13-20 13S4 24 4 24Z"/><circle cx="24" cy="24" r="6"/>',
-);
-const SUPPORT_ICON = svg(
-  '<path d="M8 18h26v12a10 10 0 0 1-10 10h-6A10 10 0 0 1 8 30V18Z"/><path d="M34 21h3a5 5 0 0 1 0 10h-3"/><path d="M16 6v6M24 6v6"/>',
-);
+/** The `?` sheet's icons for the app's own shortcuts, on ByteMD's grid. */
+const HELP_ICONS: Record<string, string> = {
+  new: svg('<path d="M28 6H12v36h24V14l-8-8Z"/><path d="M28 6v8h8M24 22v12M18 28h12"/>'),
+  search: svg('<circle cx="21" cy="21" r="13"/><path d="M31 31l11 11"/>'),
+  find: svg(
+    '<path d="M6 12h24M6 24h12M6 36h12"/><circle cx="32" cy="30" r="7"/><path d="M37 35l6 6"/>',
+  ),
+  split: svg('<rect width="36" height="32" x="6" y="8" rx="2"/><path d="M24 8v32"/>'),
+  read: svg(
+    '<path d="M4 24s7-13 20-13 20 13 20 13-7 13-20 13S4 24 4 24Z"/><circle cx="24" cy="24" r="6"/>',
+  ),
+  copy: svg(
+    '<rect width="26" height="26" x="16" y="16" rx="2"/><path d="M32 16V8a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v22a2 2 0 0 0 2 2h8"/>',
+  ),
+  export: svg('<path d="M24 6v24M14 20l10 10 10-10M8 34v8h32v-8"/>'),
+  settings: svg(
+    '<path d="M6 14h22M36 14h6M6 34h6M20 34h22"/><circle cx="32" cy="14" r="4"/><circle cx="16" cy="34" r="4"/>',
+  ),
+  open: svg(
+    '<rect width="40" height="26" x="4" y="11" rx="3"/><path d="M12 19h2M20 19h2M28 19h2M35 19h1M14 29h20"/>',
+  ),
+};
+/**
+ * Whether CodeMirror's markdown mode read this line as a list item: its marker
+ * is tagged `formatting-list`. A dash in a code block is not, so the list
+ * corrections below never touch code.
+ */
+function isListLine(cm: CodeMirrorEditor, line: number): boolean {
+  const text = cm.getLine(line);
+  const marker = text.search(/[-*+]|\d/);
+  if (marker < 0) return false;
+  return /formatting-list/.test(cm.getTokenTypeAt({ line, ch: marker + 1 }) ?? '');
+}
 
 /**
- * One of the two addresses the app knows, with the changelog in `footer.ts`.
- * It opens in a tab of its own when the writer clicks the cup; nothing is
- * ever fetched from it.
+ * Enter, as ByteMD binds it, with one change: on an empty item of a nested
+ * list it steps out one level instead of ending the whole list (`lists.ts`).
  */
-const SUPPORT_URL = 'https://ko-fi.com/m4rcone';
+function continueList(cm: CodeMirrorEditor): void {
+  const ranges = cm.listSelections();
+  const caret = cm.getCursor();
+  const text = cm.getLine(caret.line);
+  if (
+    ranges.length === 1 &&
+    !cm.somethingSelected() &&
+    caret.ch === text.length &&
+    isListLine(cm, caret.line)
+  ) {
+    const from = Math.max(0, caret.line - 200);
+    const lines = cm.getRange({ line: from, ch: 0 }, caret).split('\n');
+    const next = outdentEmptyItem(lines, lines.length - 1);
+    if (next !== null) {
+      cm.replaceRange(next, { line: caret.line, ch: 0 }, caret, '+input');
+      return;
+    }
+  }
+  cm.execCommand('newlineAndIndentContinueMarkdownList');
+}
+
+/**
+ * The marker typed again right after enter wrote it — `- - ` — folded back
+ * into one as the space that completes it is typed (`lists.ts`).
+ */
+function foldRepeatedMarker(cm: CodeMirrorEditor, change: { text: string[] }): void {
+  if (change.text.join('\n') !== ' ' || cm.listSelections().length !== 1) return;
+  const caret = cm.getCursor();
+  const line = cm.getLine(caret.line);
+  if (caret.ch !== line.length) return;
+  const folded = collapseRepeatedMarker(line);
+  if (folded === null || !isListLine(cm, caret.line)) return;
+  cm.replaceRange(folded, { line: caret.line, ch: 0 }, caret, '+input');
+}
+
+const viewLabel = (label: string) => `<span class="view-label">${label}</span>`;
+const VIEWS: Mode[] = ['write', 'split', 'read'];
+/** Where ByteMD puts the bridge's buttons; see `bytemd.css`. */
+const VIEW_PATH: Record<Mode, string> = { write: '6', split: '7', read: '8' };
+
+/**
+ * The app's own shortcuts, as the first section of ByteMD's `?` sheet, which
+ * otherwise lists only its formatting keys. ByteMD has no hook for the sheet,
+ * so the section is added to its markup and added again if ByteMD redraws it.
+ */
+function addAppShortcuts(host: HTMLElement): void {
+  const help = host.querySelector<HTMLElement>('.bytemd-help');
+  if (!help) return;
+  // ByteMD's own keys, in the app's notation. Marked once done, since ByteMD
+  // rewrites them only when its plugins change, and then they are new nodes.
+  for (const key of help.querySelectorAll<HTMLElement>('kbd:not([data-chord])')) {
+    key.dataset.chord = key.textContent ?? '';
+    key.textContent = formatChord(key.dataset.chord);
+  }
+  if (help.querySelector('.app-shortcuts')) return;
+  const section = document.createElement('div');
+  section.className = 'app-shortcuts';
+  const title = document.createElement('h2');
+  title.textContent = strings.shortcutsTitle;
+  const list = document.createElement('ul');
+  for (const { icon: drawing, label, keys } of strings.shortcuts) {
+    const item = document.createElement('li');
+    // An icon like ByteMD's own rows have, so the titles share their column.
+    const icon = document.createElement('div');
+    icon.className = 'bytemd-help-icon';
+    icon.innerHTML = HELP_ICONS[drawing] ?? '';
+    const name = document.createElement('div');
+    name.className = 'bytemd-help-title';
+    name.textContent = label;
+    const content = document.createElement('div');
+    content.className = 'bytemd-help-content';
+    const key = document.createElement('kbd');
+    key.textContent = keys;
+    content.append(key);
+    item.append(icon, name, content);
+    list.append(item);
+  }
+  section.append(title, list);
+  help.prepend(section);
+}
 
 /**
  * Gives every code block in the preview a copy button. The block is wrapped
@@ -140,9 +266,8 @@ export function createEditor(
   const inputHandlers: ((text: string, caret: number) => void)[] = [];
   const caretHandlers: ((caret: number) => void)[] = [];
   const focusHandlers: (() => void)[] = [];
-  const viewHandlers: ((mode: Exclude<Mode, 'write'>) => void)[] = [];
-  const toggleView = (mode: Exclude<Mode, 'write'>) =>
-    viewHandlers.forEach((handler) => handler(mode));
+  const viewHandlers: ((mode: Mode) => void)[] = [];
+  const askView = (mode: Mode) => viewHandlers.forEach((handler) => handler(mode));
   const scrollHandlers: ((fraction: number) => void)[] = [];
   /**
    * True from the moment a reading position is asked for until it has been
@@ -156,6 +281,7 @@ export function createEditor(
   let text = '';
   let pendingCaret: number | null = null;
   let pendingFocus = false;
+  let caretMargin = 0;
   /** The palette the current plugin list was built with; `setMode` reuses it. */
   let painted = theme;
   /**
@@ -165,6 +291,8 @@ export function createEditor(
    * It covers the caret and focus reports for the same reason.
    */
   let loading = false;
+  let overlay: object | null = null;
+  let current: { clear(): void } | null = null;
 
   const clamp = (caret: number) => Math.min(Math.max(caret, 0), text.length);
   const caretNow = () => (cm ? cm.indexFromPos(cm.getCursor()) : clamp(text.length));
@@ -182,37 +310,34 @@ export function createEditor(
    * carries the toolbar buttons the app adds, since a plugin's `right` actions
    * are the only thing ByteMD lets in beside its own. ByteMD `unshift`s each
    * one, so the list is written in display order and reversed on the way in;
-   * they land after ByteMD's six built-ins, at indexes 6, 7 and 8, which is
-   * how `bytemd.css` finds them.
+   * they land after ByteMD's six built-ins — write, split and read at indexes
+   * 6, 7 and 8 — which is how `bytemd.css` finds them.
    */
+  const viewTitles: Record<Mode, string> = {
+    write: strings.viewWriteTitle,
+    split: strings.viewSplitTitle,
+    read: strings.viewReadTitle,
+  };
+  const viewNames: Record<Mode, string> = {
+    write: strings.viewWrite,
+    split: strings.viewSplit,
+    read: strings.viewRead,
+  };
   const bridge: BytemdPlugin = {
-    actions: [
-      {
-        position: 'right' as const,
-        title: strings.splitToggle,
-        icon: SPLIT_ICON,
-        handler: { type: 'action' as const, click: () => toggleView('split') },
-      },
-      {
-        position: 'right' as const,
-        title: strings.readToggle,
-        icon: READ_ICON,
-        handler: { type: 'action' as const, click: () => toggleView('read') },
-      },
-      {
-        position: 'right' as const,
-        title: strings.support,
-        icon: SUPPORT_ICON,
-        handler: {
-          type: 'action' as const,
-          click: () => window.open(SUPPORT_URL, '_blank', 'noopener,noreferrer'),
-        },
-      },
-    ].reverse(),
+    actions: VIEWS.map((view) => ({
+      position: 'right' as const,
+      title: viewTitles[view],
+      icon: viewLabel(viewNames[view]),
+      handler: { type: 'action' as const, click: () => askView(view) },
+    })).reverse(),
     viewerEffect({ markdownBody }) {
       addCopyButtons(markdownBody);
     },
     editorEffect({ editor }) {
+      // Every plugin change redraws the toolbar and may redraw the sheet.
+      markViews();
+      toolbar?.refresh();
+      addAppShortcuts(host);
       if (cm === editor) return;
       cm = editor;
       // `setValue` drops the cursor at 0,0 and fires `cursorActivity` before
@@ -223,6 +348,7 @@ export function createEditor(
         if (loading) return;
         for (const handler of caretHandlers) handler(caretNow());
       });
+      editor.on('inputRead', foldRepeatedMarker);
       editor.on('focus', () => {
         if (loading) return;
         for (const handler of focusHandlers) handler();
@@ -235,10 +361,37 @@ export function createEditor(
         pendingFocus = false;
         editor.focus();
       }
+      if (caretMargin) editor.setOption('cursorScrollMargin', caretMargin);
     },
   };
 
+  /**
+   * The segment that is on, for assistive tech; the look comes from
+   * `data-mode` in CSS. The button role and focus come from `toolbar.ts`.
+   */
+  function markViews(): void {
+    for (const view of VIEWS) {
+      const item = host.querySelector<HTMLElement>(
+        `.bytemd-toolbar-right > [bytemd-tippy-path='${VIEW_PATH[view]}']`,
+      );
+      if (!item) continue;
+      item.setAttribute('aria-pressed', String(host.dataset.mode === view));
+    }
+  }
+
+  // The sheet is drawn when the `?` button first opens it.
+  host.addEventListener('click', (event) => {
+    if (
+      (event.target as HTMLElement).closest(
+        ".bytemd-toolbar-right > [bytemd-tippy-path='1']",
+      )
+    )
+      requestAnimationFrame(() => addAppShortcuts(host));
+  });
+
   const withBridge = (choice: 'dark' | 'light') => [...markdownPlugins(choice), bridge];
+  /** Set right after mount; ByteMD's first effect runs before it is. */
+  let toolbar: { refresh(): void } | null = null;
 
   host.dataset.mode = mode;
 
@@ -255,9 +408,14 @@ export function createEditor(
         tabSize: 2,
         indentUnit: 2,
         indentWithTabs: false,
+        // Replaces ByteMD's own binding, the only extra key it sets.
+        extraKeys: { Enter: continueList },
       },
     },
   });
+
+  toolbar = keyboardToolbar(host, strings.toolbarLabel, () => cm?.focus());
+  toolbar.refresh();
 
   component.$on('change', (event: CustomEvent<{ value: string }>) => {
     text = event.detail.value;
@@ -288,6 +446,25 @@ export function createEditor(
           /* clipboard denied: the code is still there to select by hand */
         },
       );
+      return;
+    }
+    // A task box ticked in the preview is ticked in the text; the preview is
+    // redrawn from there. The click itself changes nothing, so a box whose
+    // item has moved on stays as the text has it.
+    const box = (event.target as HTMLElement).closest<HTMLInputElement>(
+      '.bytemd-preview input[data-task-at]',
+    );
+    if (box) {
+      event.preventDefault();
+      const edit = cm && toggleTask(cm.getValue(), Number(box.dataset.taskAt));
+      if (cm && edit) {
+        cm.replaceRange(
+          edit.text,
+          cm.posFromIndex(edit.from),
+          cm.posFromIndex(edit.to),
+          '+task',
+        );
+      }
       return;
     }
     const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>(
@@ -343,7 +520,13 @@ export function createEditor(
       // That `setValue` echoes back through `change` in this same task, which
       // is what `loading` is there to swallow; the microtask covers the other
       // path, where the value reaches CodeMirror through Svelte's own flush.
-      if (cm && cm.getValue() !== next) cm.setValue(next);
+      // `setValue` is an edit like any other to CodeMirror's history, so
+      // without the clear an undo right after switching drafts would bring
+      // the previous draft's text back into this one — and save it there.
+      if (cm && cm.getValue() !== next) {
+        cm.setValue(next);
+        cm.clearHistory();
+      }
       component.$set({ value: next });
       if (caret !== undefined) placeCaret(caret);
       queueMicrotask(() => {
@@ -360,12 +543,77 @@ export function createEditor(
       cm.focus();
       cm.execCommand('selectAll');
     },
+    selection() {
+      if (!cm) return { from: clamp(text.length), to: clamp(text.length) };
+      const a = cm.indexFromPos(cm.getCursor('from'));
+      const b = cm.indexFromPos(cm.getCursor('to'));
+      return { from: a, to: b };
+    },
+    select(from, to) {
+      if (!cm) return;
+      const range = { from: cm.posFromIndex(from), to: cm.posFromIndex(to) };
+      cm.setSelection(range.from, range.to, { scroll: false });
+      // Room enough that a match near the top is not under the find panel.
+      cm.scrollIntoView(range, 120);
+    },
+    highlight(query, caseSensitive) {
+      if (!cm) return;
+      if (overlay) cm.removeOverlay(overlay);
+      overlay = null;
+      if (!query) return;
+      // Matched the way the bar counts, so what is tinted is what is counted.
+      overlay = {
+        token(stream: { string: string; pos: number; skipToEnd(): void }) {
+          const [match] = findAll(
+            stream.string.slice(stream.pos),
+            query,
+            caseSensitive,
+            1,
+          );
+          if (!match) stream.skipToEnd();
+          else if (match.from === 0) {
+            stream.pos += match.to;
+            return 'searching';
+          } else stream.pos += match.from;
+          return null;
+        },
+      };
+      cm.addOverlay(overlay);
+    },
+    markCurrent(range) {
+      current?.clear();
+      current = null;
+      if (!cm || !range) return;
+      current = cm.markText(cm.posFromIndex(range.from), cm.posFromIndex(range.to), {
+        className: 'find-current',
+      });
+    },
+    replace(ranges, replacement) {
+      const editor = cm;
+      if (!editor || !ranges.length) return;
+      // Back to front, so each offset still points where it did. One
+      // operation is one entry in the history: a single undo takes it back.
+      editor.operation(() => {
+        for (const range of [...ranges].reverse()) {
+          editor.replaceRange(
+            replacement,
+            editor.posFromIndex(range.from),
+            editor.posFromIndex(range.to),
+            '+replace',
+          );
+        }
+      });
+    },
     // CodeMirror measures the DOM to lay lines out, and measuring something
     // with `display: none` yields nothing — so text set while the editor was
     // hidden is in the document but not on screen until it is told to look
     // again. Focusing happened to trigger that, which is why the stale text
     // used to correct itself the moment the writer clicked into it.
     refresh: () => cm?.refresh(),
+    setCaretMargin(px) {
+      caretMargin = px;
+      cm?.setOption('cursorScrollMargin', px);
+    },
     // Folding either pane away is CSS, but unfolding it is not.
     //
     // The preview: mermaid lays diagrams out with `getBBox`, and a
@@ -380,6 +628,9 @@ export function createEditor(
     setMode(next) {
       const was = host.dataset.mode;
       host.dataset.mode = next;
+      markViews();
+      // Reading hides the formatting buttons; the tab stop moves off them.
+      toolbar?.refresh();
       if (was === 'write' && next !== 'write')
         component.$set({ plugins: withBridge(painted) });
       if (was === 'read' && next !== 'read') cm?.refresh();
@@ -393,7 +644,7 @@ export function createEditor(
     onInput: (handler) => inputHandlers.push(handler),
     onCaret: (handler) => caretHandlers.push(handler),
     onFocus: (handler) => focusHandlers.push(handler),
-    onToggleView: (handler) => viewHandlers.push(handler),
+    onView: (handler) => viewHandlers.push(handler),
     // Two frames: the first lets the re-render `setMode` asked for land and
     // be laid out, the second lets the scroll it causes be swallowed.
     setReadScroll(fraction) {

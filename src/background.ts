@@ -40,8 +40,8 @@ chrome.action.onClicked.addListener(() => void openPad());
 
 // Chrome tucks a new extension into the puzzle-piece menu, so a first install
 // would otherwise leave nothing on screen to click. An update opens nothing:
-// a new minor or major only leaves a note for the page, which shows a link to
-// the changelog in its footer the next time it opens.
+// a new minor or major only leaves a note for the page, which flags settings
+// until it is opened, and points at the changelog from there.
 chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   if (reason === chrome.runtime.OnInstalledReason.INSTALL) void openPad();
   if (reason !== chrome.runtime.OnInstalledReason.UPDATE) return;

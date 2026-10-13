@@ -31,9 +31,18 @@ Version **1.2.0**.
   there where the reading stopped.
 - The preview renders GitHub-flavoured markdown, code highlighting, LaTeX
   maths, mermaid diagrams and `:emoji:`. Embedded HTML is sanitized.
-- Multiple drafts, titled by their first line, with full-text search.
+- Multiple drafts, titled by their first line, with full-text search that
+  ignores case and accents.
+- Find and replace inside a draft, even in parts that are off screen.
+- Task boxes tick from the preview, and lists continue as you type them.
+- Shows whether the text is saved at a glance, with the word count and a
+  rough token count beside it.
 - Copy a draft or export it as `.md`; copy a single code block from the
   preview. Drop a `.md` or `.txt` file on the page to open it as a draft.
+- Back every draft up, dates included, into one `.json` file, and restore it
+  from the settings: you see what it will change before it does. Or export
+  them all as `.md` files in a `.zip`.
+- Two scratchpad tabs stay in step: what is saved in one shows up in the other.
 - Deleting asks for confirmation, and can still be undone for a few seconds
   from the footer.
 - Light and dark themes that follow the system.
@@ -45,23 +54,25 @@ requests at all.
 
 On Windows and Linux, `⌘` is `Ctrl` and `⌥` is `Alt`.
 
-| shortcut | what it does                                             |
-| -------- | -------------------------------------------------------- |
-| `⌥⇧S`    | open Scratchpad from anywhere in Chrome ¹                |
-| `⌘⇧D`    | new draft                                                |
-| `⌘⇧F`    | search drafts                                            |
-| `⌘/`     | preview beside the text                                  |
-| `⌘⇧P`    | reading view                                             |
-| `⌘⇧A`    | copy the whole draft                                     |
-| `⌘S`     | export as `.md`                                          |
-| `esc`    | back to writing; close the rail; cancel or undo a delete |
+| shortcut | what it does                                            |
+| -------- | ------------------------------------------------------- |
+| `⌥⇧S`    | open Scratchpad from anywhere in Chrome ¹               |
+| `⌘⇧D`    | new draft                                               |
+| `⌘⇧F`    | search drafts                                           |
+| `⌘/`     | preview beside the text                                 |
+| `⌘⇧P`    | reading view                                            |
+| `⌘⇧A`    | copy the whole draft                                    |
+| `⌘S`     | export as `.md`                                         |
+| `⌘F`     | find and replace in the draft (`⌘G` / `⌘⇧G` next, prev) |
+| `⌘⇧,`    | settings: backup, export, theme                         |
+| `esc`    | back to writing; close a panel; cancel or undo a delete |
 
-¹ Change it at `chrome://extensions/shortcuts`. Formatting shortcuts (`⌘B`,
-`⌘I`, `⌘K`…) are listed under `?` on the toolbar.
+¹ Change it at `chrome://extensions/shortcuts`. All of these, and the
+formatting shortcuts (`⌘B`, `⌘I`, `⌘K`…), are listed under `?` on the toolbar.
 
 ## Install
 
-Requires Node 20+ and Chrome 120+.
+Requires Node 22.18+ (it runs the TypeScript tests directly) and Chrome 120+.
 
 ```bash
 git clone https://github.com/m4rcone/scratchpad-newtab.git
@@ -90,15 +101,17 @@ anything network-related against `dist/`.
 
 ## Privacy
 
-Drafts stay in your Chrome profile. The only permission is `storage`, which
-keeps the theme and the open draft in `chrome.storage.local`; there is no host
+Drafts stay in your Chrome profile, and uninstalling the extension erases
+them: back them up first from **settings**, at the foot of the drafts list.
+The only permission is `storage`, which keeps the theme, the open draft and
+the date of the last backup in `chrome.storage.local`; there is no host
 permission and no access to the pages you visit. Details in
 [PRIVACY.md](PRIVACY.md).
 
 ## Support
 
 Scratchpad is free. If it saves you time, you can buy me a coffee on
-[Ko-fi](https://ko-fi.com/m4rcone) — or through the cup on the toolbar.
+[Ko-fi](https://ko-fi.com/m4rcone) — or through the link in the settings.
 
 ## License
 

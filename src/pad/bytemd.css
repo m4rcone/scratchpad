@@ -12,6 +12,7 @@
 /* ---------- shell ---------- */
 
 .bytemd {
+  position: relative;
   flex: 1;
   min-width: 0;
   /* A column, so the body takes what the toolbar leaves without ByteMD's
@@ -36,15 +37,28 @@
   display: none;
 }
 
+/* The toolbar floats over the text, translucent, so the writing shows through
+   as it scrolls under it; the panes below are padded by its height
+   (`--toolbar-h`, measured in `main.ts`). The footer does the same. */
 .bytemd-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   padding: 0 calc(var(--gutter) - 6px);
   min-height: 44px;
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--hair);
-  background: transparent;
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   color: var(--muted);
   font-size: var(--ui-size);
+  /* ByteMD's own sheet clips the bar, and tippy mounts the heading, maths and
+     diagram menus inside it: they opened as a sliver under the bar. */
+  overflow: visible;
 }
 
 /* The toolbar is floated in ByteMD's own CSS; flex needs the halves back. */
@@ -74,9 +88,10 @@
  * - the GitHub button opened a site that is not this project's.
  *
  * The app's own buttons, added by the bridge plugin in `editor.ts`, land after
- * them: split view at 6, reading at 7, Ko-fi at 8. The two view buttons move to
- * the front of the group, reading first, and light up while their view is on,
- * so the half reads: read, split · contents, help · support.
+ * them: write at 6, split at 7, read at 8. The three views move to the front
+ * of the group and are drawn as one segmented switch, the view that is on
+ * filled in, so the half reads: write | split | read · contents, help. A
+ * ByteMD upgrade that reorders its buttons breaks these indexes.
  */
 .bytemd-toolbar-right > [bytemd-tippy-path='2'],
 .bytemd-toolbar-right > [bytemd-tippy-path='3'],
@@ -85,18 +100,88 @@
   display: none;
 }
 
+/*
+ * Drawn like the theme switch in the settings: one outlined group with a
+ * little room inside, and the view that is on as a filled pill in it. ByteMD
+ * gives the three no common parent, so the group's outline is split across
+ * them — top and bottom on each, the ends on the first and last — and the
+ * pill is the label inside each one.
+ */
+.bytemd-toolbar-right > [bytemd-tippy-path='6'],
+.bytemd-toolbar-right > [bytemd-tippy-path='7'],
+.bytemd-toolbar-right > [bytemd-tippy-path='8'] {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 1px;
+  border: 1px solid var(--hair);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  background: none;
+  color: var(--mark);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.bytemd-toolbar-right > [bytemd-tippy-path='6'] {
+  order: -3;
+  padding-left: 2px;
+  border-left: 1px solid var(--hair);
+  border-radius: 6px 0 0 6px;
+}
+
 .bytemd-toolbar-right > [bytemd-tippy-path='7'] {
   order: -2;
 }
 
-.bytemd-toolbar-right > [bytemd-tippy-path='6'] {
+.bytemd-toolbar-right > [bytemd-tippy-path='8'] {
   order: -1;
+  padding-right: 2px;
+  border-right: 1px solid var(--hair);
+  border-radius: 0 6px 6px 0;
   margin-right: 12px;
 }
 
-.editor[data-mode='split'] .bytemd-toolbar-right > [bytemd-tippy-path='6'],
-.editor[data-mode='read'] .bytemd-toolbar-right > [bytemd-tippy-path='7'] {
-  color: var(--accent);
+.view-label {
+  display: block;
+  padding: 5px 11px;
+  border-radius: 4px;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.editor[data-mode='write'] .bytemd-toolbar-right > [bytemd-tippy-path='6'] .view-label,
+.editor[data-mode='split'] .bytemd-toolbar-right > [bytemd-tippy-path='7'] .view-label,
+.editor[data-mode='read'] .bytemd-toolbar-right > [bytemd-tippy-path='8'] .view-label {
+  color: var(--ink);
+  background: var(--tint);
+}
+
+/* The group keeps still under the pointer; only the word answers it. */
+.bytemd-toolbar-right > [bytemd-tippy-path='6']:hover,
+.bytemd-toolbar-right > [bytemd-tippy-path='7']:hover,
+.bytemd-toolbar-right > [bytemd-tippy-path='8']:hover {
+  background: none;
+}
+
+.bytemd-toolbar-right > [bytemd-tippy-path='6']:hover .view-label,
+.bytemd-toolbar-right > [bytemd-tippy-path='7']:hover .view-label,
+.bytemd-toolbar-right > [bytemd-tippy-path='8']:hover .view-label {
+  color: var(--ink);
+}
+
+/* The formatting buttons step back until the pointer comes to the toolbar:
+   they are there when wanted, and the views are what the eye finds first. */
+.bytemd-toolbar-left {
+  color: var(--mark);
+  transition: color 150ms ease;
+}
+
+.bytemd-toolbar:hover .bytemd-toolbar-left,
+.bytemd-toolbar:focus-within .bytemd-toolbar-left {
+  color: var(--muted);
 }
 
 /* Reading has no text to format: the buttons would write into a hidden
@@ -165,7 +250,7 @@
 
 .editor[data-mode='read'] .bytemd-preview .markdown-body {
   margin-inline: auto;
-  padding-top: 48px;
+  padding-top: calc(var(--toolbar-h) + 48px);
 }
 
 /*
@@ -244,7 +329,13 @@
 .bytemd-editor .CodeMirror .CodeMirror-lines {
   max-width: none;
   margin: 0;
-  padding: 32px 0 40px;
+  padding: calc(var(--toolbar-h) + 32px) 0 calc(var(--footer-h) + 40px);
+}
+
+/* While find is open the text starts below its panel (`--find-bottom`, from
+   `main.ts`), so a match on the first line is never under it. */
+.column:has(> .find:not([hidden])) .bytemd-editor .CodeMirror .CodeMirror-lines {
+  padding-top: max(calc(var(--toolbar-h) + 32px), calc(var(--find-bottom, 0px) + 12px));
 }
 
 .bytemd-editor .CodeMirror pre.CodeMirror-line,
@@ -266,6 +357,17 @@
 .bytemd .CodeMirror-line > span::selection,
 .bytemd .CodeMirror-line > span > span::selection {
   background: var(--selection);
+}
+
+/* Find: every match tinted, the one find stands on outlined as well. */
+.bytemd .cm-searching {
+  background: var(--match);
+  border-radius: 2px;
+}
+
+.bytemd .find-current {
+  outline: 2px solid var(--accent);
+  border-radius: 2px;
 }
 
 .bytemd .CodeMirror-activeline-background {
@@ -347,7 +449,7 @@
 .bytemd-preview .markdown-body {
   max-width: calc(var(--measure) + 8ch);
   margin: 0;
-  padding: 32px var(--gutter) 40px;
+  padding: calc(var(--toolbar-h) + 32px) var(--gutter) calc(var(--footer-h) + 40px);
   font-family: var(--sans);
   font-size: var(--preview-size);
   line-height: var(--preview-line);
@@ -432,6 +534,11 @@
 .markdown-body input[type='checkbox'] {
   accent-color: var(--accent);
   margin-right: 0.5em;
+}
+
+/* A task box ticks: a click writes the `x` into the text (`tasks.ts`). */
+.markdown-body input[data-task-at] {
+  cursor: pointer;
 }
 
 .markdown-body a {
@@ -710,6 +817,19 @@
   border-left: 1px solid var(--hair);
   background: var(--bg);
   font-size: var(--ui-size);
+  padding-top: var(--toolbar-h);
+  padding-bottom: var(--footer-h);
+}
+
+/* Its close button sits below the floating toolbar, and answers the pointer
+   in the text's ink, not ByteMD's own blue. */
+.bytemd-sidebar-close {
+  top: var(--toolbar-h);
+  color: var(--mark);
+}
+
+.bytemd-sidebar-close:hover {
+  color: var(--ink);
 }
 
 .bytemd-sidebar ul {
@@ -768,23 +888,56 @@
 
 /* ---------- narrow screens ---------- */
 
+/* A laptop window or a split view: the buttons close up so the toolbar keeps
+   to one line — the write/split/read switch and the help must stay in it. */
+@media (max-width: 1100px) {
+  .bytemd-toolbar-icon {
+    margin-left: 2px;
+    margin-right: 2px;
+  }
+
+  .bytemd-toolbar-right > [bytemd-tippy-path='8'] {
+    margin-right: 8px;
+  }
+}
+
 @media (max-width: 720px) {
-  /* Twenty-odd buttons do not fit a narrow window, so the bar wraps onto a
-     second row. Not a sideways scroll: tippy mounts the heading, maths and
+  /* Twenty-odd buttons do not fit a narrow window, so the bar takes two rows,
+     each with a job: the view switch on the left and contents and help on
+     the right, then the formatting buttons below, closed up to
+     fit one line. Not a sideways scroll: tippy mounts the heading, maths and
      diagram dropdowns inside the bar, and a scrolling bar clips them. */
   .bytemd-toolbar {
-    padding: 4px calc(var(--gutter) - 6px + var(--safe-left));
+    padding: 6px calc(var(--gutter) - 4px + var(--safe-left));
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .bytemd-toolbar-right {
+    order: -1;
+    width: 100%;
+    margin-left: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .bytemd-toolbar-right > [bytemd-tippy-path='8'] {
+    margin-right: auto;
+  }
+
+  .bytemd-toolbar-left {
+    width: 100%;
     flex-wrap: wrap;
   }
 
-  .bytemd-toolbar-left,
-  .bytemd-toolbar-right {
-    flex-wrap: wrap;
+  .bytemd-toolbar-icon {
+    margin-left: 0;
+    margin-right: 0;
   }
 
   .bytemd-editor .CodeMirror .CodeMirror-lines,
   .bytemd-preview .markdown-body {
-    padding-top: 16px;
+    padding-top: calc(var(--toolbar-h) + 16px);
   }
 
   .bytemd-editor .CodeMirror pre.CodeMirror-line,
@@ -796,4 +949,37 @@
     padding-left: calc(var(--gutter) + var(--safe-left));
     padding-right: calc(var(--gutter) + var(--safe-right));
   }
+}
+
+/* The app's shortcuts at the head of the `?` sheet (see `editor.ts`). Their
+   rows have no icon, so the empty icon cell is given the width of ByteMD's own,
+   and the titles line up with the cheatsheet below. */
+.app-shortcuts .bytemd-help-icon {
+  display: inline-block;
+  width: 16px;
+}
+
+/*
+ * Scrollbars with a column of their own — `main.ts` sets `data-scrollbars`
+ * where it measures one; floating macOS scrollbars are left alone. They are
+ * thinned and tinted to the theme, and kept clear of the floating bars:
+ * CodeMirror draws its scrollbar as an element of its own, so that one starts
+ * below the toolbar and stops above the footer; the preview scrolls itself,
+ * so while it is on screen the toolbar and the footer stop short of its
+ * scrollbar instead.
+ */
+:root[data-scrollbars='classic'] * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--mark) 55%, transparent) transparent;
+}
+
+/* CodeMirror writes its own `bottom` inline, so the footer's room is a margin. */
+:root[data-scrollbars='classic'] .bytemd .CodeMirror-vscrollbar {
+  top: var(--toolbar-h, 44px);
+  margin-bottom: var(--footer-h, 0px);
+}
+
+:root[data-scrollbars='classic'] .editor:not([data-mode='write']) .bytemd-toolbar,
+:root[data-scrollbars='classic'] .editor:not([data-mode='write']) ~ .footer {
+  right: var(--scrollbar-w, 0px);
 }
