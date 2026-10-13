@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-13
+
 ### Added
 
 - Find and replace inside the open draft (`⌘F`), in a panel floating at the
@@ -201,7 +203,8 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.2.0...HEAD
+[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/m4rcone/scratchpad-newtab/releases/tag/v1.0.0
