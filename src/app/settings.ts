@@ -11,7 +11,7 @@
  * The HTML is rebuilt only when it would differ, like the rail's.
  */
 import type { Backup } from './backup.ts';
-import { backupStatus } from './backup.ts';
+import { backupLabel } from './backup.ts';
 import type { ImportPreview, State } from './store.ts';
 import { withKey } from './html.ts';
 import { strings } from './strings.ts';
@@ -72,7 +72,7 @@ export function createSettings(
 
   return (state, pending) => {
     if (!state.settingsOpen) return;
-    const backup = backupStatus(state.lastBackup, state.drafts);
+    const backup = backupLabel(state.lastBackup, state.drafts);
     const theme = (value: 'system' | 'light' | 'dark', label: string) =>
       `<button type="button" data-action="theme" data-theme-choice="${value}" aria-pressed="${state.theme === value}">${label}</button>`;
 
@@ -85,7 +85,7 @@ export function createSettings(
 
         <section class="settings__section" aria-labelledby="settings-backup">
           <h2 id="settings-backup">${strings.backupTitle}</h2>
-          ${backup ? `<p class="settings__status${backup.stale ? ' is-stale' : ''}">${backup.label}</p>` : ''}
+          ${backup ? `<p class="settings__status">${backup}</p>` : ''}
           <p>${strings.backupExplain}</p>
           <div class="settings__row">
             <button type="button" class="settings__button is-primary" data-action="backup">${strings.backupNowButton}</button>

@@ -485,7 +485,7 @@ test('the find bar closes on the way into the reading view', async () => {
   assert.equal(store.state.findOpen, false);
 });
 
-test('a restore is previewed first, then applied, and drops the blank draft', async () => {
+test('a restore is previewed first, then applied, and keeps the blank draft', async () => {
   // Newest first, as the disk answers: the blank draft is the open one, the
   // way a fresh install opens.
   const { store: d, written } = disk([
@@ -512,12 +512,13 @@ test('a restore is previewed first, then applied, and drops the blank draft', as
     store.state.drafts.map((x) => [x.id, x.updatedAt]),
     [
       ['a', 30],
+      ['blank', 20],
       ['b', 6],
     ],
-    'dates come back as they were, and the blank draft is gone',
+    'dates come back as they were, and the blank draft stays',
   );
-  assert.deepEqual(removed, ['blank']);
-  assert.notEqual(store.state.activeId, 'blank');
+  assert.deepEqual(removed, []);
+  assert.equal(store.state.activeId, 'blank');
   await store.flush();
   assert.deepEqual(written.map((x) => x.id).sort(), ['a', 'b']);
 });
@@ -541,18 +542,17 @@ test('settings and search take turns over the editor', async () => {
   assert.equal(store.state.searchOpen, false);
 });
 
-test('a new draft asked for on an empty one is that same draft', async () => {
+test('a new draft is made each time, blank page or not', async () => {
   const store = createStore(disk([draft({})]).store, noPrefs, 'system');
   await store.load(() => '');
   store.create();
-  const blank = store.state.activeId;
   store.create();
   store.create();
-  assert.equal(store.state.activeId, blank);
-  assert.equal(store.state.drafts.length, 2, 'one blank page, not three');
+  assert.equal(store.state.drafts.length, 4, 'three blank pages');
+  assert.equal(store.state.activeId, store.state.drafts[0]!.id);
 });
 
-test('leaving an empty draft takes it away', async () => {
+test('leaving an empty draft keeps it', async () => {
   const removed: string[] = [];
   const { store: d } = disk([draft({})]);
   d.remove = async (id) => void removed.push(id);
@@ -561,17 +561,14 @@ test('leaving an empty draft takes it away', async () => {
   store.create();
   const blank = store.state.activeId!;
   store.open('stored');
-  assert.deepEqual(
-    store.state.drafts.map((x) => x.id),
-    ['stored'],
-  );
+  assert.deepEqual(store.state.drafts.map((x) => x.id).sort(), [blank, 'stored'].sort());
   await Promise.resolve();
-  assert.deepEqual(removed, [blank]);
+  assert.deepEqual(removed, []);
 
-  // A file dropped on an empty draft takes its place too.
-  store.create();
+  // A file dropped while a blank draft is open leaves that one where it is.
+  store.open(blank);
   store.create('# from a file');
-  assert.equal(store.state.drafts.length, 2);
+  assert.equal(store.state.drafts.length, 3);
 });
 
 test('the draft being written moves to the top of the rail', async () => {
@@ -590,7 +587,7 @@ test('the draft being written moves to the top of the rail', async () => {
   );
 });
 
-test('empty drafts left on the disk are cleared at boot, but the open one stays', async () => {
+test('empty drafts on the disk are all still there after a reload', async () => {
   const removed: string[] = [];
   const { store: d } = disk([
     draft({ id: 'blank-open', text: '', updatedAt: 30 }),
@@ -602,52 +599,9 @@ test('empty drafts left on the disk are cleared at boot, but the open one stays'
   await store.load(() => '');
   assert.deepEqual(
     store.state.drafts.map((x) => x.id),
-    ['blank-open', 'kept'],
+    ['blank-open', 'blank-old', 'kept'],
   );
-  assert.deepEqual(removed, ['blank-old']);
-});
-
-test('a blank draft swept by another tab stays where it is being typed into', async () => {
-  const tab = channel();
-  const stored = () => [draft({ id: 'kept', text: 'kept', updatedAt: 1 })];
-  const a = createStore(disk(stored()).store, noPrefs, 'system', tab());
-  const b = createStore(disk(stored()).store, noPrefs, 'system', tab());
-  await a.load(() => '');
-  await b.load(() => '');
-  a.create();
-  await a.flush();
-  const id = a.state.activeId!;
-  assert.ok(
-    b.state.drafts.some((d) => d.id === id),
-    'the blank reached the other tab',
-  );
-
-  // Typed here, not yet saved, when the other tab restores and sweeps blanks.
-  a.write('typed here', 10);
-  b.importDrafts([draft({ id: 'restored', text: 'restored', updatedAt: 5 })]);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.equal(a.state.activeId, id);
-  assert.equal(a.active()?.text, 'typed here');
-  await a.flush();
-  assert.equal(b.state.drafts.find((d) => d.id === id)?.text, 'typed here');
-});
-
-test('the open blank page is not taken away by another tab sweeping blanks', async () => {
-  const tab = channel();
-  const stored = () => [draft({ id: 'kept', text: 'kept', updatedAt: 1 })];
-  const a = createStore(disk(stored()).store, noPrefs, 'system', tab());
-  const b = createStore(disk(stored()).store, noPrefs, 'system', tab());
-  await a.load(() => '');
-  await b.load(() => '');
-  a.create();
-  await a.flush();
-  const id = a.state.activeId!;
-
-  b.importDrafts([draft({ id: 'restored', text: 'restored', updatedAt: 5 })]);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.equal(a.state.activeId, id);
+  assert.deepEqual(removed, []);
 });
 
 test('when another tab deletes the last draft, its blank replaces the one here', async () => {
@@ -668,14 +622,14 @@ test('when another tab deletes the last draft, its blank replaces the one here',
   assert.equal(b.state.activeId, a.state.activeId);
 });
 
-test('asking for a blank draft on a blank page makes none', async () => {
+test('a blank draft can be asked for on a blank page', async () => {
   const store = createStore(disk([]).store, noPrefs, 'system');
   await store.load(() => '');
-  assert.equal(store.create(), false);
-  assert.equal(store.create('text'), true);
+  store.create();
+  store.create('text');
   assert.deepEqual(
     store.state.drafts.map((d) => d.text),
-    ['text'],
+    ['text', '', ''],
   );
 });
 

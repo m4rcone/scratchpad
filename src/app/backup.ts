@@ -19,12 +19,6 @@ import { isTextFile, newDraft, slugOf } from './model.ts';
 import { strings } from './strings.ts';
 import type { ZipEntry } from './zip.ts';
 
-/** After this long without a backup, the app says so in red. */
-export const BACKUP_STALE_DAYS = 14;
-
-const DAY = 86400000;
-const startOfDay = (at: number) => new Date(at).setHours(0, 0, 0, 0);
-
 interface BackupFile {
   app: 'scratchpad';
   kind: 'backup';
@@ -40,31 +34,19 @@ export interface Backup {
 }
 
 /**
- * How long since the last backup, for the settings and the rail. `null` when
- * there is nothing to back up. It turns stale once the last backup is two
- * weeks old — or, with none at all, once a draft has been around that long: a
- * brand-new install is not nagged on its first day.
+ * The date of the last backup, for the settings. A plain fact, never a
+ * warning. `null` when there is nothing to back up.
  */
-export function backupStatus(
-  lastBackup: number | null,
-  drafts: Draft[],
-  now = Date.now(),
-): { label: string; stale: boolean } | null {
-  const kept = drafts.filter((draft) => draft.text.trim());
-  if (!kept.length) return null;
-  const limit = BACKUP_STALE_DAYS * DAY;
-  if (lastBackup === null) {
-    const oldest = Math.min(...kept.map((draft) => draft.createdAt));
-    return { label: strings.backupNever, stale: now - oldest > limit };
-  }
-  const days = Math.round((startOfDay(now) - startOfDay(lastBackup)) / DAY);
-  const label =
-    days <= 0
-      ? strings.backupToday
-      : days === 1
-        ? strings.backupYesterday
-        : strings.backupDays(days);
-  return { label, stale: now - lastBackup > limit };
+export function backupLabel(lastBackup: number | null, drafts: Draft[]): string | null {
+  if (!drafts.some((draft) => draft.text.trim())) return null;
+  if (lastBackup === null) return strings.backupNever;
+  return strings.backupOn(
+    new Date(lastBackup).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
+  );
 }
 
 const day = (now: number) => {

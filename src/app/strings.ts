@@ -99,12 +99,9 @@ export const strings = {
   findCount: (at: number, total: number) => (total ? `${at} of ${total}` : 'no matches'),
   replaced: (count: number) => `replaced ${count}`,
   backupNever: 'no backup yet',
-  backupToday: 'backed up today',
-  backupYesterday: 'backed up yesterday',
-  backupDays: (days: number) => `last backup ${days} days ago`,
+  backupOn: (date: string) => `last backup ${date}`,
   settings: 'settings',
   settingsKeys: isTouch ? '' : shortcut(',', true),
-  backupDue: 'back up due',
   settingsTitle: 'Settings',
   backupTitle: 'Backup',
   backupExplain:

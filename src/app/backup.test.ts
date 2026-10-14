@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   backupName,
-  backupStatus,
+  backupLabel,
   draftsFromArchive,
   exportName,
   markdownEntries,
@@ -20,37 +20,17 @@ const draft = (over: Partial<Draft>): Draft => ({
   ...over,
 });
 
-const DAY = 86400000;
-
-test('the backup line counts days, and turns stale after two weeks', () => {
-  const now = new Date(2026, 9, 13, 15).getTime();
-  const drafts = [draft({ text: 'kept', createdAt: now - 30 * DAY })];
-  assert.deepEqual(backupStatus(now - 3600000, drafts, now), {
-    label: 'backed up today',
-    stale: false,
+test('the backup line shows the date of the last one, never a warning', () => {
+  const at = new Date(2026, 9, 13, 15).getTime();
+  const drafts = [draft({ text: 'kept' })];
+  const date = new Date(at).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
   });
-  assert.equal(backupStatus(now - DAY, drafts, now)?.label, 'backed up yesterday');
-  assert.deepEqual(backupStatus(now - 19 * DAY, drafts, now), {
-    label: 'last backup 19 days ago',
-    stale: true,
-  });
-});
-
-test('with no backup yet, only drafts two weeks old make it stale', () => {
-  const now = new Date(2026, 9, 13).getTime();
-  assert.equal(
-    backupStatus(null, [draft({ text: 'new', createdAt: now })], now)?.stale,
-    false,
-  );
-  assert.equal(
-    backupStatus(null, [draft({ text: 'old', createdAt: now - 20 * DAY })], now)?.stale,
-    true,
-  );
-  assert.equal(
-    backupStatus(null, [draft({ text: '  ' })], now),
-    null,
-    'nothing to back up',
-  );
+  assert.equal(backupLabel(at, drafts), `last backup ${date}`);
+  assert.equal(backupLabel(null, drafts), 'no backup yet');
+  assert.equal(backupLabel(null, [draft({ text: '  ' })]), null, 'nothing to back up');
 });
 
 test('files are named after the day', () => {

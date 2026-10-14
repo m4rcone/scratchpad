@@ -207,8 +207,42 @@ button {
 }
 
 .rail__head svg {
+  flex: none;
   width: 20px;
   height: 20px;
+}
+
+/* The name beside the logo, in the text's own ink: the logo stays dimmed. */
+.rail__name-mark {
+  margin-left: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* New draft, the one action the rail is for, first and in the accent: the
+   same line as the actions at the foot, word on the left and key on the right. */
+.rail__create {
+  flex: none;
+  padding: 16px 24px 0;
+}
+
+.rail__new {
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent);
+  border-radius: 5px;
+}
+
+.rail__new .rail__keys {
+  color: inherit;
+  opacity: 0.75;
 }
 
 .rail__group {
@@ -289,19 +323,13 @@ button {
   color: var(--muted);
 }
 
-/* Three actions, one per line: what it does on the left, its key — or what
-   it has to say — on the right. New draft, the one the rail is for, is in the
-   text's own ink. */
+/* One action per line: what it does on the left, its key on the right. */
 .rail__action {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 5px 0;
-}
-
-.rail__new {
-  color: var(--ink);
 }
 
 /* Each action answers to the hover with a wash, like the rows above it. */
@@ -312,22 +340,7 @@ button {
   border-radius: 5px;
 }
 
-.rail__due {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--danger);
-}
-
-.rail__due-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
-/* An update's news, beside "settings": the backup flag's dot, in the accent,
-   since it is no risk. */
+/* An update's news, beside "settings": a dot in the accent. */
 .rail__news {
   display: inline-block;
   width: 6px;
@@ -385,10 +398,6 @@ button {
   margin-left: 6px;
   border-radius: 50%;
   background: var(--accent);
-}
-
-.topbar__flag.is-due {
-  background: var(--danger);
 }
 
 .topbar__logo {
@@ -651,10 +660,6 @@ button {
 
 .settings__status {
   color: var(--ink);
-}
-
-.settings__status.is-stale {
-  color: var(--danger);
 }
 
 /* The version just updated to, while its news has not been looked at. */
@@ -1192,6 +1197,10 @@ a,
     background: var(--code-bg);
   }
 
+  .rail__new:hover {
+    background: var(--code-bg);
+  }
+
   .rail__row:hover .rail__title {
     color: var(--ink);
   }
@@ -1252,6 +1261,7 @@ a,
   }
 
   .rail__head,
+  .rail__create,
   .rail__label,
   .rail__empty {
     padding-left: 20px;
@@ -1298,6 +1308,15 @@ a,
 
   .rail__head {
     padding-left: var(--gutter);
+  }
+
+  .rail__create {
+    padding-left: var(--gutter);
+    padding-right: var(--gutter);
+  }
+
+  .rail__new {
+    min-height: 44px;
   }
 
   .rail.is-open {
