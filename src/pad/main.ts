@@ -12,7 +12,6 @@ import './bytemd.css';
 
 import {
   backupName,
-  backupStatus,
   draftsFromArchive,
   exportName,
   markdownEntries,
@@ -123,23 +122,17 @@ fileInput.hidden = true;
 document.body.append(fileInput);
 const railButton = topbarEl.querySelector<HTMLElement>('[data-action="rail"]')!;
 /** What the drafts button flags, so it is drawn again only when that changes. */
-let railFlag: 'due' | 'news' | '' | null = null;
+let railFlag: boolean | null = null;
 /**
- * On a narrow window the rail, and the flags at its foot, are behind the
- * drafts button; it carries the same dot, so they are not out of sight.
+ * On a narrow window the rail, and the news flag at its foot, are behind the
+ * drafts button; it carries the same dot, so it is not out of sight.
  */
 function paintRailButton(state: State): void {
-  const flag = backupStatus(state.lastBackup, state.drafts)?.stale
-    ? 'due'
-    : state.whatsNew && !state.settingsOpen
-      ? 'news'
-      : '';
+  const flag = Boolean(state.whatsNew) && !state.settingsOpen;
   if (flag === railFlag) return;
   railFlag = flag;
-  const spoken =
-    flag === 'due' ? strings.backupDue : flag === 'news' ? strings.newsFlag : '';
   railButton.innerHTML = flag
-    ? `${strings.draftsButton}<span class="topbar__flag is-${flag}" aria-hidden="true"></span><span class="visually-hidden">, ${spoken}</span>`
+    ? `${strings.draftsButton}<span class="topbar__flag" aria-hidden="true"></span><span class="visually-hidden">, ${strings.newsFlag}</span>`
     : strings.draftsButton;
 }
 // On a narrow window the rail, and the logo at its head, are tucked away; the
@@ -481,9 +474,11 @@ async function openFiles(
         failed = true;
       }
     } else {
-      // An empty file on an empty page makes no new draft: there is one.
+      // An empty file has nothing to open.
       const text = (await file.text()).replace(/\r\n?/g, '\n');
-      if (store.create(text, file.lastModified)) opened += 1;
+      if (!text.trim()) continue;
+      store.create(text, file.lastModified);
+      opened += 1;
     }
   }
   if (opened) editor.focus();

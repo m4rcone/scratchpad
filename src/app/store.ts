@@ -313,9 +313,8 @@ export function createStore(
   }
 
   /**
-   * An empty draft has nothing to keep, so leaving it — for another draft or
-   * a new one — takes it away. Without this, every ⌘⇧D left one more
-   * "untitled" behind in the rail, and they stayed there after a reload.
+   * Takes away a blank draft the app put up itself. One the writer made stays,
+   * blank or not, until they delete it: leaving it is not deleting it.
    */
   function dropIfEmpty(id: string | null) {
     const draft = state.drafts.find((other) => other.id === id);
@@ -468,10 +467,6 @@ export function createStore(
         state.activeId = draft.id;
       }
 
-      // Empty drafts left behind before they were cleared on the way out.
-      for (const empty of state.drafts.filter((draft) => draft.id !== state.activeId))
-        dropIfEmpty(empty.id);
-
       sort();
       state.loaded = true;
       for (const event of early.splice(0)) receive(event);
@@ -514,7 +509,6 @@ export function createStore(
       // Opening the draft that is already active still means "take me to it":
       // it closes search and leaves preview. Returning early skipped that.
       const same = state.activeId === id;
-      if (!same) dropIfEmpty(state.activeId);
       state.activeId = id;
       toWriting();
       if (!same) void prefs.write({ activeId: id });
@@ -525,20 +519,9 @@ export function createStore(
      * A new draft, empty or holding a dropped file. A file opens at its top:
      * the caret is where the reading starts, not past the last line. `at`
      * dates the draft, for a dropped file: it comes in as old as the file is,
-     * never later than now.
-     *
-     * Asked for an empty one while the open draft is empty, it is that draft:
-     * there is already a blank page on screen. Returns whether a draft was
-     * made.
+     * never later than now. Blank drafts are as many as the writer asks for.
      */
-    create(text = '', at?: number): boolean {
-      const open = active();
-      if (!text && open && !open.text.trim()) {
-        toWriting();
-        notify();
-        return false;
-      }
-      dropIfEmpty(state.activeId);
+    create(text = '', at?: number) {
       const draft = newDraft(text);
       draft.caret = 0;
       if (at !== undefined && Number.isFinite(at)) {
@@ -550,7 +533,6 @@ export function createStore(
       void prefs.write({ activeId: draft.id });
       scheduleSave(draft);
       notify();
-      return true;
     },
 
     /** Deleting only asks when there is something to lose. */
@@ -656,10 +638,6 @@ export function createStore(
         if (kind === 'same') continue;
         adopt(draft);
         scheduleSave(state.drafts.find((other) => other.id === draft.id)!);
-      }
-      if (outcome.added + outcome.updated) {
-        for (const empty of state.drafts.filter((draft) => !draft.text.trim()))
-          dropIfEmpty(empty.id);
       }
       sort();
       if (!state.drafts.some((draft) => draft.id === state.activeId)) {
