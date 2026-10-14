@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-10-14
+
+### Changed
+
+- New draft moves to the top of the rail, under the logo, in the accent,
+  with its key beside it; the rail's foot keeps search and settings.
+- The rail's head reads "Scratchpad" beside the logo.
+- Settings shows the date of the last backup instead of how long ago it was,
+  and never in red. The rail and the drafts button no longer flag an overdue
+  backup.
+- Blank drafts stay until they are deleted. Opening another draft, reloading
+  or restoring a backup no longer clears them, and new draft always makes a
+  new one, even on a blank page.
+- An empty file dropped on the page opens nothing, whatever draft is open.
+
 ## [1.3.0] — 2026-10-13
 
 ### Added
@@ -203,7 +218,8 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.3.0...HEAD
+[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.0.0...v1.1.0
