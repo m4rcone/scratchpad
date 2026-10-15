@@ -9,7 +9,7 @@ network: your drafts never leave your machine.
 
 ![Scratchpad: markdown notes, one click away. No account, no network. Beside it, the app in split view, the markdown source on the left and the rendered preview on the right](.github/banner.png)
 
-Version **1.4.0**.
+Version **1.5.0**.
 
 ## Principles
 

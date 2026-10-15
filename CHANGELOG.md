@@ -5,6 +5,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-10-15
+
+### Added
+
+- Focus mode (`⌘⇧↵` or the toolbar button): the text alone, in any view. The
+  toolbar and footer reappear at the window's edges; `esc` leaves. Drag the
+  column's edges to set its width, double-click to reset.
+- Optional line numbers, hidden in focus and in narrow windows.
+- Optional serif typeface for the reading view.
+
+### Changed
+
+- The footer is now a monospace status bar: save state, view, line and
+  column, word and token counts.
+- The theme switch is a sun/moon icon, and switching themes fades.
+- The settings' Theme section is now Appearance, with theme, line numbers and
+  reading typeface.
+
+### Fixed
+
+- With overlay scrollbars (macOS), the editor's scrollbar was drawn over the
+  toolbar and footer; it now passes under them, like the preview's.
+- Closing settings by opening search or a draft left the update notice
+  flagged.
+
 ## [1.4.0] — 2026-10-14
 
 ### Changed
@@ -218,7 +243,8 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.4.0...HEAD
+[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/m4rcone/scratchpad/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/m4rcone/scratchpad/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/m4rcone/scratchpad/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/m4rcone/scratchpad/compare/v1.1.0...v1.2.0
