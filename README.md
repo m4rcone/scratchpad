@@ -3,6 +3,9 @@
 A markdown scratchpad one click away on the Chrome toolbar. No account, no
 network: your drafts never leave your machine.
 
+**[Install from the Chrome Web Store][store]**
+
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/pfcimbknnlnnebpaohbocihjjmcejoml.svg)][store]
 [![CI](https://github.com/m4rcone/scratchpad/actions/workflows/ci.yml/badge.svg)](https://github.com/m4rcone/scratchpad/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/support-ko--fi-FF5E5B.svg)](https://ko-fi.com/m4rcone)
@@ -61,7 +64,12 @@ toolbar lists every shortcut, formatting included.
 
 ## Install
 
-Requires Node 22.18+ and Chrome 120+.
+Install it from the [Chrome Web Store][store] (Chrome 120+), then pin it from
+the puzzle-piece menu to keep its icon on the toolbar.
+
+### From source
+
+Requires Node 22.18+.
 
 ```bash
 git clone https://github.com/m4rcone/scratchpad.git
@@ -102,3 +110,5 @@ Scratchpad is free. If it saves you time, you can support it on
 ## License
 
 [MIT](LICENSE) © Marcone Boff
+
+[store]: https://chromewebstore.google.com/detail/scratchpad/pfcimbknnlnnebpaohbocihjjmcejoml
