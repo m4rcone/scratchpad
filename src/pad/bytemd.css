@@ -52,8 +52,8 @@
   align-items: center;
   border-bottom: 1px solid var(--hair);
   background: var(--bar);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(var(--bar-blur));
+  backdrop-filter: blur(var(--bar-blur));
   color: var(--muted);
   font-size: var(--ui-size);
   /* ByteMD's own sheet clips the bar, and tippy mounts the heading, maths and
@@ -308,6 +308,128 @@
   min-width: min(100%, var(--column));
   max-width: calc(100% - var(--inset));
   margin-inline: var(--inset) 0;
+}
+
+/* ---------- focus ---------- */
+
+/*
+ * The toolbar waits just above the window's top edge, and comes back over the
+ * text while the pointer is at that edge (`data-peek`, from `main.ts`); the
+ * footer does the same at the bottom (`pad.css`). Coming back, neither pushes
+ * the text. Out of sight it is out of reach too, keyboard included.
+ *
+ * The text is held in one column in the middle of the window, started a
+ * little way down as on a page: the reading measure, unless the writer
+ * dragged its edges (`--focus-width`, set on the shell). Split keeps its
+ * panes as they are.
+ */
+.shell[data-focus] .bytemd-toolbar {
+  transform: translateY(-100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease,
+    visibility 0s 200ms;
+}
+
+.shell[data-focus][data-peek='top'] .bytemd-toolbar {
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease;
+}
+
+.shell[data-focus] .bytemd-editor .CodeMirror .CodeMirror-lines {
+  padding-top: max(48px, 12vh);
+}
+
+/* The source's column is made by the lines' own padding, not by narrowing
+   the box they sit in: CodeMirror draws a selection across that box's whole
+   width, less the padding it measures on a line, so a narrowed box had full
+   lines selected out to the window's edge. `main.ts` has it measure again
+   when focus or its width changes. */
+.shell[data-focus]
+  .editor[data-mode='write']
+  .bytemd-editor
+  .CodeMirror
+  pre.CodeMirror-line,
+.shell[data-focus]
+  .editor[data-mode='write']
+  .bytemd-editor
+  .CodeMirror
+  pre.CodeMirror-line-like {
+  padding: 0 max(var(--gutter), (100% - var(--focus-width, var(--measure))) / 2);
+}
+
+.shell[data-focus] .editor[data-mode='read'] .bytemd-preview .markdown-body {
+  --column: var(--focus-width, calc(var(--measure) + 8ch - 2 * var(--gutter)));
+  padding-top: max(48px, 12vh);
+}
+
+/* Reading lets wide code, tables and diagrams run past the column to the
+   pane's edge (see `--column` above). Focus holds everything to its column
+   instead, the width the writer chose: what is wider scrolls sideways
+   inside it. */
+.shell[data-focus]
+  .editor[data-mode='read']
+  .markdown-body
+  > :is(.code-block, table, .bytemd-mermaid) {
+  max-width: min(var(--column), 100%);
+}
+
+/* ---------- line numbers ---------- */
+
+/*
+ * The numbers live in the margin the text already has. Their column is held
+ * at the margin's width — CodeMirror moves the text over by whatever that
+ * column measures — and the lines drop their own left padding in exchange,
+ * so turning the numbers on does not move a word. Each number is set flush
+ * right, a little way short of the text. CodeMirror writes both widths
+ * inline, which is what the `!important`s are for.
+ */
+.bytemd .CodeMirror-gutters {
+  background: transparent;
+  border-right: none;
+}
+
+.bytemd .CodeMirror-gutter.CodeMirror-linenumbers {
+  width: var(--gutter) !important;
+}
+
+.editor[data-line-numbers] .bytemd-editor .CodeMirror pre.CodeMirror-line,
+.editor[data-line-numbers] .bytemd-editor .CodeMirror pre.CodeMirror-line-like {
+  padding-left: 0;
+}
+
+/* Smaller than the text, on the text's line height so they sit on its lines;
+   dimmed below the markers, except the caret's line. */
+.bytemd .CodeMirror-linenumber {
+  width: calc(var(--gutter) - 16px) !important;
+  padding: 0;
+  text-align: right;
+  font-size: calc(var(--editor-size) - 2.5px);
+  line-height: calc(var(--editor-size) * var(--editor-line));
+  font-variant-numeric: tabular-nums;
+  color: var(--mark);
+  opacity: 0.6;
+}
+
+.bytemd .CodeMirror-gutter-wrapper.is-current .CodeMirror-linenumber {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* ---------- the reading typeface ---------- */
+
+/* Chosen in settings. Code, key caps and diagrams keep their own faces. */
+:root[data-reading='serif'] .editor[data-mode='read'] .bytemd-preview .markdown-body {
+  font-family: var(--serif);
+  font-size: var(--serif-size);
 }
 
 /* ---------- the writing surface ---------- */
@@ -971,6 +1093,14 @@
 :root[data-scrollbars='classic'] * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--mark) 55%, transparent) transparent;
+}
+
+/* CodeMirror stacks its scrollbar at 6, over the floating bars, where the
+   preview's runs under them. 1 still clears the text, which CodeMirror keeps
+   in a stacking context of its own at 0, so both scrollbars pass under the
+   bars alike — in split, side by side. */
+.bytemd .CodeMirror-vscrollbar {
+  z-index: 1;
 }
 
 /* CodeMirror writes its own `bottom` inline, so the footer's room is a margin. */

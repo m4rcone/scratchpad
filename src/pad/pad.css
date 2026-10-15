@@ -31,15 +31,30 @@
   /* The toolbar and the footer, which float over the text: the page's own
      ground, a little see-through. */
   --bar: color-mix(in srgb, var(--bg) var(--bar-opacity), transparent);
-  /* Dark letters under a light veil fade faster than light ones under a dark
-     one, so the light theme's veil is thinner. */
-  --bar-opacity: 82%;
+  --bar-opacity: 90%;
+  /* How much the bars, and search and settings over the page, soften the text
+     that shows through them. */
+  --bar-blur: 4px;
   /* Under what floats over the text: the find panel. */
   --float-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  /* Layers: what sits beside the text is a step lighter than the page, and
+     what floats over it a step more, so depth reads without a shadow to carry
+     it. The dimmest ink still clears 4.5:1 on both (4.8:1 and 4.6:1). */
+  --surface: #131315;
+  --raised: #18181b;
+  /* A hover on a layer: a wash of the ink, so it shows on any of them. */
+  --wash: color-mix(in srgb, var(--ink) 6%, transparent);
 
   --mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* The reading view's serif, when it is chosen: the system's own, never a
+     download. Charter on a Mac, Cambria on Windows. */
+  --serif:
+    'Iowan Old Style', Charter, 'Bitstream Charter', 'Sitka Text', Cambria, ui-serif,
+    Georgia, serif;
+  /* A serif reads smaller than the sans at the same size. */
+  --serif-size: 17px;
   --editor-size: 15px;
   --editor-line: 1.7;
   --preview-size: 16px;
@@ -71,7 +86,11 @@
     --tint: rgba(47, 95, 190, 0.08);
     --scrim: rgba(251, 250, 248, 0.9);
     --float-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
-    --bar-opacity: 70%;
+    /* The light veil is a touch thinner: dark letters fade faster under it. */
+    --bar-opacity: 88%;
+    /* 4.8:1 for the dimmest ink on the rail. */
+    --surface: #f5f3ef;
+    --raised: #ffffff;
     color-scheme: light;
   }
 }
@@ -92,7 +111,9 @@
   --tint: rgba(47, 95, 190, 0.08);
   --scrim: rgba(251, 250, 248, 0.9);
   --float-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
-  --bar-opacity: 70%;
+  --bar-opacity: 88%;
+  --surface: #f5f3ef;
+  --raised: #ffffff;
   color-scheme: light;
 }
 
@@ -175,6 +196,7 @@ button {
   flex: none;
   padding: 0 0 0 var(--safe-left);
   border-right: 1px solid var(--hair);
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -455,7 +477,7 @@ button {
   align-items: flex-start;
   gap: 4px;
   padding: 6px;
-  background: var(--bg);
+  background: var(--raised);
   border: 1px solid var(--hair);
   border-radius: 8px;
   box-shadow: var(--float-shadow);
@@ -585,7 +607,10 @@ button {
   position: absolute;
   inset: 0;
   z-index: 3;
-  background: var(--bg);
+  /* A veil, like the bars: the page shows through, softened. */
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(var(--bar-blur));
+  backdrop-filter: blur(var(--bar-blur));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 40px calc(var(--gutter) + var(--safe-right)) calc(40px + var(--safe-bottom))
@@ -712,6 +737,40 @@ button {
   font-size: 13px;
 }
 
+/* One small choice per line: its name, and a word on it, on the left; the
+   choice on the right. On a narrow window the choice goes under the name. */
+.settings__pref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+
+.settings__pref-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings__pref-label {
+  color: var(--ink);
+}
+
+.settings__pref-hint {
+  color: var(--mark);
+  font-size: var(--ui-size);
+}
+
+.settings__pref .settings__segments {
+  align-self: center;
+}
+
+.settings__font-serif {
+  font-family: var(--serif);
+}
+
 .settings__segments button[aria-pressed='true'] {
   background: var(--tint);
   color: var(--ink);
@@ -744,17 +803,19 @@ button {
   bottom: 0;
   z-index: 2;
   background: var(--bar);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(var(--bar-blur));
+  backdrop-filter: blur(var(--bar-blur));
   border-top: 1px solid var(--hair);
-  padding: 10px calc(var(--gutter) + var(--safe-right)) calc(10px + var(--safe-bottom))
+  padding: 9px calc(var(--gutter) + var(--safe-right)) calc(9px + var(--safe-bottom))
     calc(var(--gutter) + var(--safe-left));
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 24px;
   color: var(--muted);
-  font-size: var(--ui-size);
+  /* An editor's status bar: monospace, a step under the UI text. */
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .footer__status {
@@ -782,12 +843,30 @@ button {
 .footer__count {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-left: 6px;
   color: var(--mark);
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* One field after another, each behind a hairline, as a status bar has them. */
+.footer__field {
+  padding: 0 10px;
+  border-left: 1px solid var(--hair);
+  line-height: 14px;
+}
+
+.footer__field:last-child {
+  padding-right: 0;
+}
+
+/* The view, the way a modal editor names its mode. */
+.footer__mode {
+  color: var(--accent);
+}
+
+.footer__position {
+  font-variant-numeric: tabular-nums;
 }
 
 .footer__count[hidden] {
@@ -918,6 +997,75 @@ kbd {
   color: var(--accent);
 }
 
+/* The theme switch is a drawing, not a word: a square to hit, on the line of
+   the words beside it. */
+.footer__theme {
+  display: grid;
+  place-items: center;
+  /* Narrow windows make every footer action a flex row; still centred. */
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0 -4px;
+  border-radius: 5px;
+}
+
+.theme-icon {
+  overflow: visible;
+}
+
+/* The sun: a small core, its rays out, the bite off to the side. */
+.theme-icon__core {
+  r: 4.5px;
+}
+
+.theme-icon__bite {
+  cx: 26px;
+  cy: 4px;
+}
+
+.theme-icon__rays {
+  transform-origin: 12px 12px;
+}
+
+/* The moon: a larger core with the bite in it, the rays turned and folded. */
+.footer__theme.is-moon .theme-icon {
+  transform: rotate(-20deg);
+}
+
+.footer__theme.is-moon .theme-icon__core {
+  r: 8px;
+}
+
+.footer__theme.is-moon .theme-icon__bite {
+  cx: 17px;
+  cy: 7.5px;
+}
+
+.footer__theme.is-moon .theme-icon__rays {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.4);
+}
+
+.footer__theme.is-ready .theme-icon,
+.footer__theme.is-ready .theme-icon__core,
+.footer__theme.is-ready .theme-icon__bite,
+.footer__theme.is-ready .theme-icon__rays {
+  transition:
+    transform 450ms cubic-bezier(0.3, 0.7, 0.2, 1),
+    r 450ms cubic-bezier(0.3, 0.7, 0.2, 1),
+    cx 450ms cubic-bezier(0.3, 0.7, 0.2, 1),
+    cy 450ms cubic-bezier(0.3, 0.7, 0.2, 1),
+    opacity 250ms ease;
+}
+
+/* A theme changed by hand fades from one to the other (`main.ts`): the
+   browser's own crossfade of the whole page, at the icon's pace. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 450ms;
+}
+
 .footer__action[data-action='undo'] {
   color: var(--accent);
   text-decoration: none;
@@ -956,6 +1104,156 @@ kbd {
 
 .shell[data-dropping] .drop-hint {
   opacity: 1;
+}
+
+/* ---------- focus ---------- */
+
+/* The text alone: the rail and the top bar step away, the toolbar and the
+   footer wait past the window's edges (the toolbar's rule is in
+   `bytemd.css`), and the way out waits in a corner. */
+.shell[data-focus] .rail,
+.shell[data-focus] .topbar {
+  display: none;
+}
+
+.shell[data-focus] .footer {
+  transform: translateY(100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease,
+    visibility 0s 200ms;
+}
+
+.shell[data-focus][data-peek='bottom'] .footer {
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease;
+}
+
+/* The footer coming back takes the corner the way out was in. */
+.shell[data-peek='bottom'] .focus-exit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * The column's two edges, while focus holds the text in one: dragging either
+ * sets its width, both edges at once, so the text stays in the middle. They
+ * stand a little way off the text, out of its way, and show only while the
+ * pointer comes close to one (`is-near`, from `main.ts`) — not over the
+ * whole text, where they would only be noise. A double click goes back to
+ * the measure.
+ *
+ * They are placed from the same width the text is held at, worked out in the
+ * text's own face so that `ch` counts alike: the editor's monospace when
+ * writing, the preview's face when reading.
+ */
+.focus-measure {
+  --handle-gap: 28px;
+  display: none;
+  position: absolute;
+  /* Only as tall as the line drawn in it: above and below, the pointer is
+     over the text, and the text keeps its own cursor. */
+  top: 35%;
+  bottom: 35%;
+  z-index: 2;
+  width: 16px;
+  margin-left: -8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.focus-measure::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--hair);
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease;
+}
+
+.focus-measure.is-near::after,
+.focus-measure:hover::after,
+.focus-measure.is-dragging::after {
+  opacity: 1;
+  background: var(--accent);
+}
+
+.shell[data-focus] .editor[data-mode='write'] ~ .focus-measure {
+  --text: min(var(--focus-width, var(--measure)), 100% - 2 * var(--gutter));
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--editor-size);
+}
+
+.shell[data-focus] .editor[data-mode='read'] ~ .focus-measure {
+  --text: min(
+    var(--focus-width, calc(var(--measure) + 8ch - 2 * var(--gutter))),
+    100% - 2 * var(--gutter)
+  );
+  display: block;
+  font-family: var(--sans);
+  font-size: var(--preview-size);
+}
+
+:root[data-reading='serif']
+  .shell[data-focus]
+  .editor[data-mode='read']
+  ~ .focus-measure {
+  font-family: var(--serif);
+  font-size: var(--serif-size);
+}
+
+.focus-measure--start {
+  left: calc(50% - var(--text) / 2 - var(--handle-gap));
+}
+
+.focus-measure--end {
+  left: calc(50% + var(--text) / 2 + var(--handle-gap));
+}
+
+/* A phone, or no pointer to drag with: the text takes the width there is. */
+@media (max-width: 720px), (hover: none) {
+  .focus-measure {
+    display: none !important;
+  }
+}
+
+.focus-exit {
+  display: none;
+  position: absolute;
+  right: calc(20px + var(--safe-right));
+  bottom: calc(16px + var(--safe-bottom));
+  z-index: 2;
+  align-items: center;
+  gap: 6px;
+  color: var(--mark);
+  font-size: var(--ui-size);
+  opacity: 0.6;
+  transition: opacity 150ms ease;
+}
+
+.shell[data-focus] .focus-exit {
+  display: inline-flex;
+}
+
+.focus-exit:hover,
+.focus-exit:focus-visible {
+  opacity: 1;
+  color: var(--ink);
 }
 
 /* ---------- empty draft ---------- */
@@ -1004,7 +1302,9 @@ kbd {
   position: absolute;
   inset: 0;
   z-index: 3;
-  background: var(--bg);
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(var(--bar-blur));
+  backdrop-filter: blur(var(--bar-blur));
   padding: 40px calc(var(--gutter) + var(--safe-right)) 0
     calc(var(--gutter) + var(--safe-left));
   display: flex;
@@ -1194,11 +1494,11 @@ a,
 
   .rail__action:hover {
     color: var(--ink);
-    background: var(--code-bg);
+    background: var(--wash);
   }
 
   .rail__new:hover {
-    background: var(--code-bg);
+    background: var(--wash);
   }
 
   .rail__row:hover .rail__title {
@@ -1302,7 +1602,7 @@ a,
     z-index: 4;
     width: 100%;
     border-right: none;
-    background: var(--bg);
+    background: var(--surface);
     padding: 0 var(--safe-right) 0 var(--safe-left);
   }
 
@@ -1430,7 +1730,8 @@ a,
 /* A thin split view or a phone: the counts give way before the actions do,
    tokens first. */
 @media (max-width: 560px) {
-  .footer__tokens {
+  .footer__tokens,
+  .footer__position {
     display: none;
   }
 }

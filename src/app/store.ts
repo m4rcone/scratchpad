@@ -8,6 +8,7 @@ import type {
   DraftStore,
   DraftSync,
   PrefsStore,
+  ReadingFont,
   ThemeChoice,
 } from '../storage/types.ts';
 import { newDraft } from './model.ts';
@@ -22,7 +23,17 @@ export interface State {
   drafts: Draft[];
   activeId: string | null;
   mode: Mode;
+  /**
+   * Nothing but the text: the rail and the bars step away, in whichever view
+   * is on, and the view can still change inside it. Kept for the session
+   * only; a new tab opens with everything in place.
+   */
+  focus: boolean;
+  /** The width focus holds the text at, in pixels; `null` for the measure. */
+  focusWidth: number | null;
   theme: ThemeChoice;
+  readingFont: ReadingFont;
+  lineNumbers: boolean;
   searchOpen: boolean;
   /** The find-and-replace bar over the source. */
   findOpen: boolean;
@@ -116,7 +127,11 @@ export function createStore(
     drafts: [],
     activeId: null,
     mode: 'write',
+    focus: false,
+    focusWidth: null,
     theme,
+    readingFont: 'sans',
+    lineNumbers: false,
     searchOpen: false,
     findOpen: false,
     settingsOpen: false,
@@ -330,11 +345,21 @@ export function createStore(
     );
   }
 
+  /**
+   * Settings closing, by whatever closes them: the news they showed leaves
+   * the footer with them. Every path out comes through here.
+   */
+  function closeSettings() {
+    if (!state.settingsOpen) return;
+    state.settingsOpen = false;
+    state.whatsNew = null;
+  }
+
   /** A draft taken up — opened or created: every panel closes onto its text. */
   function toWriting() {
     state.mode = 'write';
     state.searchOpen = false;
-    state.settingsOpen = false;
+    closeSettings();
     state.railOpen = false;
     state.query = '';
     state.pendingDelete = false;
@@ -444,6 +469,9 @@ export function createStore(
       mirror();
 
       if (saved.theme) state.theme = saved.theme;
+      if (saved.readingFont) state.readingFont = saved.readingFont;
+      if (saved.lineNumbers !== undefined) state.lineNumbers = saved.lineNumbers;
+      if (saved.focusWidth !== undefined) state.focusWidth = saved.focusWidth;
       if (saved.lastBackup !== undefined) state.lastBackup = saved.lastBackup;
       // Kept on the disk until settings is opened: a flag nobody saw in the
       // session it arrived in is still there in the next one.
@@ -662,6 +690,18 @@ export function createStore(
       notify();
     },
 
+    /** In and out of focus, the view stays what it was. */
+    setFocus(on: boolean) {
+      if (state.focus === on) return;
+      state.focus = on;
+      if (on) {
+        closeSettings();
+        state.searchOpen = false;
+        state.railOpen = false;
+      }
+      notify();
+    },
+
     /**
      * Each view button is a switch back to writing: pressing the one already on
      * returns to `write`, pressing the other goes straight to it — split to
@@ -677,6 +717,27 @@ export function createStore(
       notify();
     },
 
+    setFocusWidth(focusWidth: number | null) {
+      if (state.focusWidth === focusWidth) return;
+      state.focusWidth = focusWidth;
+      void prefs.write({ focusWidth });
+      notify();
+    },
+
+    setLineNumbers(lineNumbers: boolean) {
+      if (state.lineNumbers === lineNumbers) return;
+      state.lineNumbers = lineNumbers;
+      void prefs.write({ lineNumbers });
+      notify();
+    },
+
+    setReadingFont(readingFont: ReadingFont) {
+      if (state.readingFont === readingFont) return;
+      state.readingFont = readingFont;
+      void prefs.write({ readingFont });
+      notify();
+    },
+
     setFind(open: boolean) {
       if (state.findOpen === open) return;
       state.findOpen = open;
@@ -689,16 +750,17 @@ export function createStore(
      */
     setSettings(open: boolean) {
       if (state.settingsOpen === open) return;
-      state.settingsOpen = open;
-      if (state.whatsNew) {
-        if (open) void prefs.write({ whatsNew: null });
-        else state.whatsNew = null;
+      if (!open) {
+        closeSettings();
+        notify();
+        return;
       }
-      if (open) {
-        state.searchOpen = false;
-        state.railOpen = false;
-        state.pendingDelete = false;
-      }
+      state.settingsOpen = true;
+      // Opening settings is seeing the news; it leaves the footer on close.
+      if (state.whatsNew) void prefs.write({ whatsNew: null });
+      state.searchOpen = false;
+      state.railOpen = false;
+      state.pendingDelete = false;
       notify();
     },
 
@@ -706,7 +768,7 @@ export function createStore(
       state.searchOpen = open;
       if (open) {
         state.railOpen = false;
-        state.settingsOpen = false;
+        closeSettings();
       }
       state.query = '';
       state.cursor = 0;

@@ -22,6 +22,7 @@ import { createEditor } from '../app/editor.ts';
 import logo from '../app/logo.svg?raw';
 import { createFind } from '../app/find.ts';
 import { createFooter } from '../app/footer.ts';
+import { withKey } from '../app/html.ts';
 import { createRail } from '../app/rail.ts';
 import { createSearch, searchResults } from '../app/search.ts';
 import { createSettings } from '../app/settings.ts';
@@ -35,8 +36,8 @@ import { applyTheme, bootTheme, effectiveTheme, systemTheme } from '../app/theme
 import { readZip, writeZip } from '../app/zip.ts';
 import { broadcastSync } from '../storage/broadcast.ts';
 import { indexedDbStore } from '../storage/indexeddb.ts';
-import { prefsStore } from '../storage/prefs.ts';
-import type { Draft } from '../storage/types.ts';
+import { MIN_FOCUS_WIDTH, prefsStore } from '../storage/prefs.ts';
+import type { Draft, ThemeChoice } from '../storage/types.ts';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -49,6 +50,9 @@ const findEl = $('find');
 const hintsEl = $('hints');
 const settingsEl = $('settings');
 const shellEl = document.querySelector<HTMLElement>('.shell')!;
+const mainEl = document.querySelector<HTMLElement>('.main')!;
+/** Wide enough for the line numbers: below it the margin is 24px. */
+const wide = window.matchMedia('(min-width: 881px)');
 
 // A pinned theme is known synchronously, so the first frame is already right —
 // and so is the palette mermaid bakes into the diagrams it draws.
@@ -150,6 +154,11 @@ let searchWasOpen = false;
 let lastReplaced = store.state.replaced;
 let findWasOpen = false;
 let settingsWasOpen = false;
+let lastColumn = '';
+/** True while an edge of the focus column is held: the drag owns the width. */
+let dragging = false;
+/** Whether the footer has had a caret to show since the editor came up. */
+let positioned = false;
 
 function paint(state: State): void {
   const active = store.active();
@@ -158,14 +167,17 @@ function paint(state: State): void {
   // Only reset the document when the draft itself changed — another draft, or
   // this one rewritten by another tab or a restore: rewriting it on every
   // keystroke would fight the caret and wipe CodeMirror's undo history.
+  let reset = false;
   if (active && (switched || state.replaced !== lastReplaced)) {
     editor.setText(active.text, active.caret);
     lastRenderedId = active.id;
+    reset = true;
   }
   lastReplaced = state.replaced;
   if (!active && lastRenderedId) {
     editor.setText('');
     lastRenderedId = null;
+    reset = true;
   }
 
   searchEl.hidden = !state.searchOpen;
@@ -178,13 +190,10 @@ function paint(state: State): void {
   }
   settingsWasOpen = state.settingsOpen;
   const covered = state.searchOpen || state.settingsOpen;
-  const wasHidden = editorEl.hidden;
-  editorEl.hidden = covered;
-  // Coming back from search, the editor has just regained a size. Anything
-  // `setText` wrote above landed while it had none, so CodeMirror is asked to
-  // measure again now — synchronously, so the draft is right on the same frame
-  // it reappears rather than a blink later.
-  if (wasHidden && !editorEl.hidden) editor.refresh();
+  // Search and settings are veils over the page, like the bars: the text stays
+  // where it is underneath, seen through them and out of reach — no click,
+  // no tab stop — until they close.
+  mainEl.inert = covered;
 
   if (state.searchOpen) {
     results = searchResults(state);
@@ -210,6 +219,24 @@ function paint(state: State): void {
   }
 
   applyTheme(state.theme);
+  shellEl.toggleAttribute('data-focus', state.focus);
+  if (!state.focus) delete shellEl.dataset.peek;
+  if (dragging) {
+    // The drag sets the width as it goes and stores it when let go.
+  } else if (state.focusWidth)
+    shellEl.style.setProperty('--focus-width', `${state.focusWidth}px`);
+  else shellEl.style.removeProperty('--focus-width');
+  // Focus sets the source's column in the lines' padding, which CodeMirror
+  // measures once and keeps: a new column means measuring again, or a
+  // selection is drawn to the old one.
+  const column = `${state.focus}:${state.focusWidth}`;
+  if (column !== lastColumn) {
+    lastColumn = column;
+    requestAnimationFrame(() => editor.refresh());
+  }
+  editor.setLineNumbers(state.lineNumbers && !state.focus && wide.matches);
+  if (state.readingFont === 'serif') document.documentElement.dataset.reading = 'serif';
+  else delete document.documentElement.dataset.reading;
   const nowTheme = effectiveTheme(state.theme);
   if (nowTheme !== lastTheme) {
     lastTheme = nowTheme;
@@ -229,9 +256,18 @@ function paint(state: State): void {
     !active ||
     !!active.text ||
     state.mode === 'read' ||
+    state.focus ||
     covered ||
     state.findOpen;
   footer.paint(state, editor.getText());
+  // The caret's own moves reach the footer through `onCaret`. A paint places
+  // it only when the text was swapped under it, whose caret `setText` keeps
+  // from being reported, or when CodeMirror was not up yet to be asked.
+  if (reset || !positioned) {
+    const at = editor.position();
+    footer.position(at);
+    positioned = !!at;
+  }
 }
 
 hintsEl.innerHTML = `
@@ -248,10 +284,132 @@ dropHint.setAttribute('aria-hidden', 'true');
 dropHint.innerHTML = `<div><strong>${strings.dropTitle}</strong>${strings.dropDetail.map((line) => `<span>${line}</span>`).join('')}</div>`;
 shellEl.append(dropHint);
 
+// The one thing focus leaves on screen besides the text: the way out, dimmed
+// in a corner until the pointer comes to it.
+const focusExit = document.createElement('button');
+focusExit.type = 'button';
+focusExit.className = 'focus-exit';
+focusExit.innerHTML = withKey(strings.escKey, strings.focusExit);
+focusExit.addEventListener('click', () => {
+  store.setFocus(false);
+  if (store.state.mode !== 'read') editor.focus();
+});
+columnEl.append(focusExit);
+
+/**
+ * In focus the toolbar and the footer wait past the window's edges and come
+ * back over the text while the pointer is at one of them — or on the bar
+ * itself, or on a menu it opened, which tippy mounts inside it.
+ */
+const PEEK_EDGE = 40;
+function setPeek(edge: '' | 'top' | 'bottom'): void {
+  if ((shellEl.dataset.peek ?? '') === edge) return;
+  if (edge) shellEl.dataset.peek = edge;
+  else delete shellEl.dataset.peek;
+}
+/**
+ * The way out sits in the bottom corner, inside the footer's edge: the
+ * pointer on its way there must not bring the footer up over it.
+ */
+const EXIT_ROOM = 24;
+function nearExit(x: number, y: number): boolean {
+  const box = focusExit.getBoundingClientRect();
+  return x >= box.left - EXIT_ROOM && y >= box.top - EXIT_ROOM;
+}
+/** How close the pointer comes before an edge of the column shows. */
+const HANDLE_NEAR = 48;
+const handles: HTMLElement[] = [];
+
+columnEl.addEventListener('mousemove', (event) => {
+  if (!store.state.focus) return;
+  const box = columnEl.getBoundingClientRect();
+  const y = event.clientY - box.top;
+  const onToolbar = !!editorEl.querySelector('.bytemd-toolbar:hover');
+  const onFooter = footerEl.matches(':hover');
+  if (y < PEEK_EDGE || onToolbar) setPeek('top');
+  else if (
+    onFooter ||
+    (y > box.height - PEEK_EDGE && !nearExit(event.clientX, event.clientY))
+  )
+    setPeek('bottom');
+  else setPeek('');
+  for (const handle of handles) {
+    const at = handle.getBoundingClientRect();
+    const near = Math.abs(event.clientX - (at.left + at.width / 2)) < HANDLE_NEAR;
+    handle.classList.toggle('is-near', near);
+  }
+});
+columnEl.addEventListener('mouseleave', () => {
+  setPeek('');
+  for (const handle of handles) handle.classList.remove('is-near');
+});
+
+/**
+ * The column's edges in focus (see `.focus-measure`). Dragging sets the width
+ * on the page as it goes and keeps it once let go; a drag that never moved
+ * keeps nothing. The gap is the one the stylesheet stands them off the text by
+ * (`--handle-gap`).
+ */
+for (const side of ['start', 'end']) {
+  const handle = document.createElement('div');
+  handle.className = `focus-measure focus-measure--${side}`;
+  handle.title = strings.focusWidthTitle;
+  handle.setAttribute('aria-hidden', 'true');
+  handle.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add('is-dragging');
+    dragging = true;
+    const gutter =
+      parseFloat(getComputedStyle(columnEl).getPropertyValue('--gutter')) || 0;
+    const gap =
+      parseFloat(getComputedStyle(handle).getPropertyValue('--handle-gap')) || 0;
+    let width = 0;
+    // The lines' padding moves with the width, and CodeMirror has to measure
+    // it again or draws the caret and selection to the old column: once a
+    // frame, not once a pointer event.
+    let measuring = false;
+    const move = (at: PointerEvent) => {
+      const box = columnEl.getBoundingClientRect();
+      const half = Math.abs(at.clientX - (box.left + box.width / 2));
+      width = Math.round(
+        Math.min(box.width - 2 * gutter, Math.max(MIN_FOCUS_WIDTH, 2 * (half - gap))),
+      );
+      shellEl.style.setProperty('--focus-width', `${width}px`);
+      if (!measuring && store.state.mode === 'write') {
+        measuring = true;
+        requestAnimationFrame(() => {
+          measuring = false;
+          editor.refresh();
+        });
+      }
+    };
+    const end = () => {
+      handle.classList.remove('is-dragging');
+      dragging = false;
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      if (width) store.setFocusWidth(width);
+      if (store.state.mode !== 'read') editor.focus();
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
+  handle.addEventListener('dblclick', () => store.setFocusWidth(null));
+  columnEl.append(handle);
+  handles.push(handle);
+}
+
 store.subscribe(paint);
 
 editor.onInput((text, caret) => store.write(text, caret));
-editor.onCaret((caret) => store.moveCaret(caret));
+editor.onCaret((caret) => {
+  store.moveCaret(caret);
+  footer.position(editor.position());
+});
+editor.onFocusMode(toggleFocus);
 // Coming back to the text means the delete was not meant: enter must type a
 // newline again, not confirm.
 editor.onFocus(() => store.cancelDelete());
@@ -495,13 +653,39 @@ async function openFiles(
  */
 function toggleTheme(): void {
   const next = effectiveTheme(store.state.theme) === 'dark' ? 'light' : 'dark';
-  store.setTheme(next === systemTheme() ? 'system' : next);
+  changeTheme(next === systemTheme() ? 'system' : next);
+}
+
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+/**
+ * A theme chosen by hand — the footer's switch or the settings — fades from
+ * one to the other: the browser photographs the page, applies the theme and
+ * crossfades the two (`pad.css`), so nothing has to animate its own colours
+ * and mermaid redrawing its diagrams happens out of sight. A choice that
+ * leaves the screen as it was (system, when the system is already that
+ * theme), a reduced-motion setting, or a browser without the API, just
+ * applies it. The system turning dark on its own is followed without a fade.
+ */
+function changeTheme(choice: ThemeChoice): void {
+  const same = effectiveTheme(choice) === effectiveTheme(store.state.theme);
+  if (same || reducedMotion.matches || !document.startViewTransition) {
+    store.setTheme(choice);
+    return;
+  }
+  document.startViewTransition(() => store.setTheme(choice));
 }
 
 /** Leaving a view for `write` hands the caret straight back to the text. */
 function toggleMode(mode: 'split' | 'read'): void {
   store.toggleMode(mode);
   if (store.state.mode === 'write') editor.focus();
+}
+
+/** In and out of focus; the caret goes back to the text either way. */
+function toggleFocus(): void {
+  store.setFocus(!store.state.focus);
+  if (store.state.mode !== 'read') editor.focus();
 }
 
 function backToWriting(): void {
@@ -610,10 +794,15 @@ settingsEl.addEventListener('click', (event) => {
   else if (action === 'restore-cancel') cancelRestore();
   else if (action === 'export-all') exportAll();
   else if (action === 'open-files') pickFiles('.md,.markdown,.txt,.zip', true);
-  else if (action === 'theme') {
+  else if (action === 'line-numbers')
+    store.setLineNumbers(target?.dataset.linesChoice === 'on');
+  else if (action === 'reading-font') {
+    const choice = target?.dataset.fontChoice;
+    if (choice === 'sans' || choice === 'serif') store.setReadingFont(choice);
+  } else if (action === 'theme') {
     const choice = target?.dataset.themeChoice;
     if (choice === 'system' || choice === 'light' || choice === 'dark')
-      store.setTheme(choice);
+      changeTheme(choice);
   }
 });
 
@@ -639,6 +828,7 @@ searchEl.addEventListener('mousemove', (event) => {
 window
   .matchMedia('(prefers-color-scheme: light)')
   .addEventListener('change', () => paint(store.state));
+wide.addEventListener('change', () => paint(store.state));
 
 /**
  * Every chord here is deliberately one ByteMD and CodeMirror leave alone.
@@ -669,6 +859,9 @@ window.addEventListener('keydown', (event) => {
     } else if (key === 'p' && event.shiftKey) {
       event.preventDefault();
       toggleMode('read');
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault();
+      toggleFocus();
     } else if (key === 'd' && event.shiftKey) {
       event.preventDefault();
       createDraft();
@@ -758,6 +951,14 @@ window.addEventListener('keydown', (event) => {
   if (state.findOpen && event.key === 'Escape') {
     event.preventDefault();
     closeFind();
+    return;
+  }
+
+  // Focus is left first, onto the view it was in; the next escape goes on
+  // from there to writing, as it would have without focus.
+  if (state.focus && event.key === 'Escape') {
+    event.preventDefault();
+    store.setFocus(false);
     return;
   }
 

@@ -5,6 +5,8 @@
 import { isMac, isTouch, shortcut } from './platform.ts';
 
 const hint = (key: string, shift = false) => (isTouch ? '' : ` ${shortcut(key, shift)}`);
+/** Enter as the platform writes it in a chord: `⌘⇧↵`, `Ctrl+Shift+Enter`. */
+const ENTER = isMac ? '↵' : 'Enter';
 
 export const strings = {
   emptyHint: 'write, paste or drop a file',
@@ -25,6 +27,13 @@ export const strings = {
   viewWriteTitle: 'text only',
   viewSplitTitle: `text and preview${hint('/')}`,
   viewReadTitle: `preview only${hint('P', true)}`,
+  focusTitle: `focus: the text alone${hint(ENTER, true)}`,
+  /** In the corner while focus is on; escape or a click leaves it. */
+  focusExit: 'leave focus',
+  focusWidthTitle: 'drag to set the width; double-click for the default',
+  /** The footer's view, in its own words. */
+  modeLabel: { write: 'write', split: 'split', read: 'read' },
+  position: (line: number, column: number) => `Ln ${line}, Col ${column}`,
   toolbarLabel: 'formatting and views',
   appName: 'Scratchpad',
   close: 'close',
@@ -138,8 +147,17 @@ export const strings = {
   exportAllButton: 'Export all as Markdown',
   openFilesButton: 'Open .md files…',
   exportedAll: (name: string) => `exported as ${name}`,
-  appearanceTitle: 'Theme',
+  appearanceTitle: 'Appearance',
+  themeLabel: 'Theme',
   themeSystem: 'system',
+  lineNumbersLabel: 'Line numbers',
+  lineNumbersHint: 'In the margin, as in a code editor; not in focus.',
+  lineNumbersOff: 'off',
+  lineNumbersOn: 'on',
+  readingLabel: 'Reading typeface',
+  readingHint: 'For the reading view; code stays monospace.',
+  readingSans: 'sans',
+  readingSerif: 'serif',
   aboutTitle: 'About',
   version: (version: string) => `Scratchpad ${version}`,
   aboutPrivacy: 'No account, no network, no telemetry.',
@@ -157,6 +175,7 @@ export const strings = {
     { icon: 'find', label: 'find and replace', keys: shortcut('F') },
     { icon: 'split', label: 'preview beside', keys: shortcut('/') },
     { icon: 'read', label: 'read', keys: shortcut('P', true) },
+    { icon: 'focus', label: 'focus', keys: shortcut(ENTER, true) },
     { icon: 'copy', label: 'copy the draft', keys: shortcut('A', true) },
     { icon: 'export', label: 'export as .md', keys: shortcut('S') },
     { icon: 'settings', label: 'settings', keys: shortcut(',', true) },

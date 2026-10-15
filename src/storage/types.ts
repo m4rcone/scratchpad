@@ -36,9 +36,20 @@ export interface DraftStore {
 
 export type ThemeChoice = 'system' | 'dark' | 'light';
 
+/** The reading view's typeface: the system sans, or a serif for long reads. */
+export type ReadingFont = 'sans' | 'serif';
+
 export interface Prefs {
   activeId: string | null;
   theme: ThemeChoice;
+  readingFont: ReadingFont;
+  /** Numbers in the source's margin, as a code editor has them. */
+  lineNumbers: boolean;
+  /**
+   * How wide focus holds the text, in pixels, as the writer dragged it;
+   * `null` for the reading measure.
+   */
+  focusWidth: number | null;
   /**
    * A version just updated to, whose news the footer offers for one session.
    * The service worker sets it; the page clears it as soon as it has read it.

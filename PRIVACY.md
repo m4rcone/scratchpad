@@ -1,39 +1,40 @@
 # Privacy policy
 
-_Last updated: 2026-09-27_
+_Last updated: 2026-10-15_
 
 Scratchpad is a Chrome extension that keeps markdown drafts on your computer.
 
-## What it collects
+## Data collection
 
-Nothing. There is no account, no analytics, no telemetry and no server. The
-extension makes no network requests, and its content security policy forbids
-them — even a remote image in a draft is not loaded.
+None. There is no account, analytics, telemetry or server. The extension makes
+no network requests, and its content security policy blocks them, including
+remote images in a draft.
 
-## What it stores
+## Data storage
 
 Everything stays in your Chrome profile:
 
-- **Drafts**, in the extension's IndexedDB.
-- **Preferences** — the theme, the open draft and when you last made a
-  backup — in `chrome.storage.local`.
-- **A copy of the draft being edited**, in `localStorage`, so the last
+- **Drafts** in the extension's IndexedDB.
+- **Preferences** in `chrome.storage.local`: theme, line numbers, reading
+  typeface, focus width, the open draft, the date of the last backup and
+  whether an update's notes have been seen.
+- **A copy of the draft being edited** in `localStorage`, so the last
   keystroke survives a tab closed mid-save. It is cleared on the next open.
 
-Nothing is synced or readable by websites. Removing the extension deletes it
-all. Backups and Markdown exports are files your browser saves when you ask
-for them; the extension does not send them anywhere.
+Nothing is synced or readable by websites, and uninstalling the extension
+deletes it all. Backups and exports are files your browser saves when you ask;
+the extension does not send them anywhere.
 
 ## Permissions
 
 Only `storage`, for the preferences above. There is no host permission: the
 extension cannot read or change the pages you visit.
 
-## Links
+## External links
 
-Links in the preview and the Ko-fi cup on the toolbar open a new tab when you
-click them. That site's own policy applies there.
+Links in the preview and in the settings open in a new tab when clicked. The
+destination site's own policy applies there.
 
 ## Contact
 
-<https://github.com/m4rcone/scratchpad-newtab/issues>
+<https://github.com/m4rcone/scratchpad/issues>

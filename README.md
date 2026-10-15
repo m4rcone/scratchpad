@@ -1,15 +1,15 @@
 # Scratchpad
 
 A markdown scratchpad one click away on the Chrome toolbar. No account, no
-network, your data never leaves your machine.
+network: your drafts never leave your machine.
 
-[![CI](https://github.com/m4rcone/scratchpad-newtab/actions/workflows/ci.yml/badge.svg)](https://github.com/m4rcone/scratchpad-newtab/actions/workflows/ci.yml)
+[![CI](https://github.com/m4rcone/scratchpad/actions/workflows/ci.yml/badge.svg)](https://github.com/m4rcone/scratchpad/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/support-ko--fi-FF5E5B.svg)](https://ko-fi.com/m4rcone)
 
 ![Scratchpad: markdown notes, one click away. No account, no network. Beside it, the app in split view, the markdown source on the left and the rendered preview on the right](.github/banner.png)
 
-Version **1.4.0**.
+Version **1.5.0**.
 
 ## Principles
 
@@ -18,76 +18,64 @@ Version **1.4.0**.
 3. No network requests. No telemetry. No permission beyond what is needed.
 4. Markdown is the editing format.
 
-## What it does
+## Features
 
-- Opens from the toolbar icon or `⌥⇧S` (`Alt+Shift+S` on Windows and Linux),
-  and reuses its tab if it is already open.
-- Reopens the draft you left, caret in place. Saving is automatic, down to the
-  last keystroke.
-- Highlights markdown as you type and keeps the markers visible, dimmed.
-- Three views: writing, writing with the preview beside it, and the preview
-  alone for reading. Reading keeps prose at a comfortable measure and lets wide
-  code, tables and diagrams use the rest of the screen; each draft reopens
-  there where the reading stopped.
-- The preview renders GitHub-flavoured markdown, code highlighting, LaTeX
-  maths, mermaid diagrams and `:emoji:`. Embedded HTML is sanitized.
-- Multiple drafts, titled by their first line, with full-text search that
-  ignores case and accents.
-- Find and replace inside a draft, even in parts that are off screen.
-- Task boxes tick from the preview, and lists continue as you type them.
-- Shows whether the text is saved at a glance, with the word count and a
-  rough token count beside it.
-- Copy a draft or export it as `.md`; copy a single code block from the
-  preview. Drop a `.md` or `.txt` file on the page to open it as a draft.
-- Back every draft up, dates included, into one `.json` file, and restore it
-  from the settings: you see what it will change before it does. Or export
-  them all as `.md` files in a `.zip`.
-- Two scratchpad tabs stay in step: what is saved in one shows up in the other.
-- Deleting asks for confirmation, and can still be undone for a few seconds
-  from the footer.
-- Light and dark themes that follow the system.
-
-Remote images in a draft are not loaded: the extension makes no network
-requests at all.
+- **Always at hand.** Opens from the toolbar or `⌥⇧S`, reusing its tab, on the
+  draft you left with the caret in place. Every keystroke is saved.
+- **Write, split, read.** Source with visible, dimmed markers; a live preview
+  beside it; or the rendered page alone, at a reading measure, optionally in a
+  serif.
+- **Focus.** The text alone, in any view, at a width you set by dragging.
+- **Rich preview.** GitHub-flavoured markdown, code highlighting, LaTeX,
+  mermaid and `:emoji:`, with embedded HTML sanitized. Task boxes tick from
+  the preview.
+- **Drafts.** Titled by their first line, with full-text search, find and
+  replace, and undo after delete. Two open tabs stay in sync.
+- **Status bar.** Save state, view, line and column, words and a rough token
+  count. Optional line numbers in the margin.
+- **Import and export.** Copy or export a draft as `.md`, drop a `.md` or
+  `.txt` file to open it, back everything up to one `.json` and restore it
+  with a preview of the changes, or export all drafts as a `.zip`.
+- **Themes.** Light and dark, following the system or set by hand.
 
 ## Shortcuts
 
 On Windows and Linux, `⌘` is `Ctrl` and `⌥` is `Alt`.
 
-| shortcut | what it does                                            |
-| -------- | ------------------------------------------------------- |
-| `⌥⇧S`    | open Scratchpad from anywhere in Chrome ¹               |
-| `⌘⇧D`    | new draft                                               |
-| `⌘⇧F`    | search drafts                                           |
-| `⌘/`     | preview beside the text                                 |
-| `⌘⇧P`    | reading view                                            |
-| `⌘⇧A`    | copy the whole draft                                    |
-| `⌘S`     | export as `.md`                                         |
-| `⌘F`     | find and replace in the draft (`⌘G` / `⌘⇧G` next, prev) |
-| `⌘⇧,`    | settings: backup, export, theme                         |
-| `esc`    | back to writing; close a panel; cancel or undo a delete |
+| shortcut | action                                                     |
+| -------- | ---------------------------------------------------------- |
+| `⌥⇧S`    | open Scratchpad from anywhere in Chrome ¹                  |
+| `⌘⇧D`    | new draft                                                  |
+| `⌘⇧F`    | search drafts                                              |
+| `⌘F`     | find and replace (`⌘G` / `⌘⇧G` next, previous)             |
+| `⌘/`     | split view                                                 |
+| `⌘⇧P`    | reading view                                               |
+| `⌘⇧↵`    | focus                                                      |
+| `⌘⇧A`    | copy the draft                                             |
+| `⌘S`     | export as `.md`                                            |
+| `⌘⇧,`    | settings                                                   |
+| `esc`    | back to writing, leave focus, close a panel, undo a delete |
 
-¹ Change it at `chrome://extensions/shortcuts`. All of these, and the
-formatting shortcuts (`⌘B`, `⌘I`, `⌘K`…), are listed under `?` on the toolbar.
+¹ Configurable at `chrome://extensions/shortcuts`. The `?` button on the
+toolbar lists every shortcut, formatting included.
 
 ## Install
 
-Requires Node 22.18+ (it runs the TypeScript tests directly) and Chrome 120+.
+Requires Node 22.18+ and Chrome 120+.
 
 ```bash
-git clone https://github.com/m4rcone/scratchpad-newtab.git
-cd scratchpad-newtab
+git clone https://github.com/m4rcone/scratchpad.git
+cd scratchpad
 npm install
 npm run build
 ```
 
-In `chrome://extensions`, turn on developer mode, choose **Load unpacked** and
-pick `dist/`. Then pin Scratchpad from the puzzle-piece menu so its icon stays on
-the toolbar.
+In `chrome://extensions`, enable developer mode, choose **Load unpacked** and
+select `dist/`. Pin the extension to keep its icon on the toolbar.
 
 ## Development
 
-| command                           | what it does                         |
+| command                           | action                               |
 | --------------------------------- | ------------------------------------ |
 | `npm run dev`                     | Vite dev server                      |
 | `npm run build`                   | type-check and build `dist/`         |
@@ -96,22 +84,20 @@ the toolbar.
 | `npm run package`                 | zip `dist/` for the Chrome Web Store |
 | `npm run icons`                   | regenerate the icons                 |
 
-The dev server runs without the extension's content security policy, so check
-anything network-related against `dist/`.
+The dev server has no content security policy; test anything network-related
+against `dist/`.
 
 ## Privacy
 
-Drafts stay in your Chrome profile, and uninstalling the extension erases
-them: back them up first from **settings**, at the foot of the drafts list.
-The only permission is `storage`, which keeps the theme, the open draft and
-the date of the last backup in `chrome.storage.local`; there is no host
-permission and no access to the pages you visit. Details in
-[PRIVACY.md](PRIVACY.md).
+Drafts live in your Chrome profile and are erased when the extension is
+uninstalled, so back them up from **settings** first. The only permission is
+`storage`, for preferences; there is no host permission and no access to the
+pages you visit. See [PRIVACY.md](PRIVACY.md).
 
 ## Support
 
-Scratchpad is free. If it saves you time, you can buy me a coffee on
-[Ko-fi](https://ko-fi.com/m4rcone) — or through the link in the settings.
+Scratchpad is free. If it saves you time, you can support it on
+[Ko-fi](https://ko-fi.com/m4rcone).
 
 ## License
 

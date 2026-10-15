@@ -3,11 +3,15 @@
  * have to be there on the very first frame. Outside the extension (vite dev)
  * it falls back to localStorage so the page still runs.
  */
-import type { Prefs, PrefsStore, ThemeChoice } from './types.ts';
+import type { Prefs, PrefsStore, ReadingFont, ThemeChoice } from './types.ts';
 
 const KEY = 'scratchpad.prefs.v1';
 
 const THEMES: ThemeChoice[] = ['system', 'dark', 'light'];
+const READING_FONTS: ReadingFont[] = ['sans', 'serif'];
+
+/** The narrowest column focus can be dragged to, and kept at. */
+export const MIN_FOCUS_WIDTH = 240;
 
 function sanitize(raw: unknown): Partial<Prefs> {
   if (!raw || typeof raw !== 'object') return {};
@@ -18,6 +22,17 @@ function sanitize(raw: unknown): Partial<Prefs> {
   }
   if (THEMES.includes(value.theme as ThemeChoice))
     prefs.theme = value.theme as ThemeChoice;
+  if (READING_FONTS.includes(value.readingFont as ReadingFont))
+    prefs.readingFont = value.readingFont as ReadingFont;
+  if (typeof value.lineNumbers === 'boolean') prefs.lineNumbers = value.lineNumbers;
+  if (
+    value.focusWidth === null ||
+    (typeof value.focusWidth === 'number' &&
+      value.focusWidth >= MIN_FOCUS_WIDTH &&
+      value.focusWidth <= 4000)
+  ) {
+    prefs.focusWidth = value.focusWidth as number | null;
+  }
   if (typeof value.whatsNew === 'string' || value.whatsNew === null) {
     prefs.whatsNew = value.whatsNew as string | null;
   }
