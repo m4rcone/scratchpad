@@ -75,6 +75,25 @@ export function createSettings(
     const backup = backupLabel(state.lastBackup, state.drafts);
     const theme = (value: 'system' | 'light' | 'dark', label: string) =>
       `<button type="button" data-action="theme" data-theme-choice="${value}" aria-pressed="${state.theme === value}">${label}</button>`;
+    const lines = (value: 'off' | 'on', label: string) =>
+      `<button type="button" data-action="line-numbers" data-lines-choice="${value}" aria-pressed="${state.lineNumbers === (value === 'on')}">${label}</button>`;
+    // The serif option is set in a serif, so the choice shows what it is.
+    const font = (value: 'sans' | 'serif', label: string) =>
+      `<button type="button" class="settings__font-${value}" data-action="reading-font" data-font-choice="${value}" aria-pressed="${state.readingFont === value}">${label}</button>`;
+
+    /**
+     * The look of things is a handful of small choices, so they share one
+     * section, a line each: what it is on the left, with a word on it below,
+     * and the choice on the right.
+     */
+    const pref = (id: string, label: string, hint: string, buttons: string) => `
+      <div class="settings__pref">
+        <div class="settings__pref-text">
+          <span class="settings__pref-label" id="settings-${id}">${label}</span>
+          ${hint ? `<span class="settings__pref-hint">${hint}</span>` : ''}
+        </div>
+        <div class="settings__segments" role="group" aria-labelledby="settings-${id}">${buttons}</div>
+      </div>`;
 
     const html = `
       <div class="settings__col">
@@ -103,11 +122,11 @@ export function createSettings(
           </div>
         </section>
 
-        <section class="settings__section" aria-labelledby="settings-theme">
-          <h2 id="settings-theme">${strings.appearanceTitle}</h2>
-          <div class="settings__segments" role="group" aria-labelledby="settings-theme">
-            ${theme('system', strings.themeSystem)}${theme('light', strings.themeLight)}${theme('dark', strings.themeDark)}
-          </div>
+        <section class="settings__section" aria-labelledby="settings-appearance">
+          <h2 id="settings-appearance">${strings.appearanceTitle}</h2>
+          ${pref('theme', strings.themeLabel, '', theme('system', strings.themeSystem) + theme('light', strings.themeLight) + theme('dark', strings.themeDark))}
+          ${pref('lines', strings.lineNumbersLabel, strings.lineNumbersHint, lines('off', strings.lineNumbersOff) + lines('on', strings.lineNumbersOn))}
+          ${pref('reading', strings.readingLabel, strings.readingHint, font('sans', strings.readingSans) + font('serif', strings.readingSerif))}
         </section>
 
         <section class="settings__section" aria-labelledby="settings-about">
@@ -133,12 +152,16 @@ export function createSettings(
     const focused = root.contains(document.activeElement)
       ? (document.activeElement as HTMLElement)
       : null;
-    const key = focused?.dataset.themeChoice ?? focused?.dataset.action;
+    const key =
+      focused?.dataset.themeChoice ??
+      focused?.dataset.fontChoice ??
+      focused?.dataset.linesChoice ??
+      focused?.dataset.action;
     root.innerHTML = html;
     if (key) {
       root
         .querySelector<HTMLElement>(
-          `[data-theme-choice="${key}"], [data-action="${key}"]:not([data-theme-choice])`,
+          `[data-theme-choice="${key}"], [data-font-choice="${key}"], [data-lines-choice="${key}"], [data-action="${key}"]:not([data-theme-choice], [data-font-choice], [data-lines-choice])`,
         )
         ?.focus();
     }

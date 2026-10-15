@@ -362,6 +362,28 @@ test("an update's news waits until settings is opened, then goes when it closes"
   assert.equal(store.state.whatsNew, null);
 });
 
+test('settings closed by focus, search or a draft take the news with them', async () => {
+  const prefs: PrefsStore = {
+    async read() {
+      return { whatsNew: '1.1.0' };
+    },
+    async write() {},
+  };
+  for (const close of [
+    (s: ReturnType<typeof createStore>) => s.setFocus(true),
+    (s: ReturnType<typeof createStore>) => s.setSearch(true),
+    (s: ReturnType<typeof createStore>) => s.create(),
+  ]) {
+    const { store: d } = disk([draft({})]);
+    const store = createStore(d, prefs, 'system');
+    await store.load(() => '');
+    store.setSettings(true);
+    close(store);
+    assert.equal(store.state.settingsOpen, false);
+    assert.equal(store.state.whatsNew, null);
+  }
+});
+
 /** A channel between two stores in the same test, as two tabs would share. */
 function channel() {
   const handlers: ((event: DraftEvent) => void)[] = [];
@@ -473,6 +495,82 @@ test('restoring adds what is new, updates what is newer, and skips the rest', as
   assert.ok(!store.state.drafts.some((x) => x.id === 'd'), 'same text, not again');
   await store.flush();
   assert.deepEqual(written.map((x) => x.id).sort(), ['b', 'c']);
+});
+
+test('focus keeps whichever view is on, and the view can change inside it', async () => {
+  const store = createStore(disk([draft({})]).store, noPrefs, 'system');
+  await store.load(() => '');
+  store.setMode('split');
+  store.setSearch(true);
+  store.setFocus(true);
+  assert.equal(store.state.focus, true);
+  assert.equal(store.state.mode, 'split');
+  assert.equal(store.state.searchOpen, false);
+
+  store.toggleMode('read');
+  store.toggleMode('split');
+  store.toggleMode('split');
+  assert.equal(store.state.focus, true);
+  assert.equal(store.state.mode, 'write');
+
+  // Leaving focus keeps the view it was in.
+  store.setMode('read');
+  store.setFocus(false);
+  assert.equal(store.state.mode, 'read');
+});
+
+test('the width focus holds the text at is kept, and can go back to the measure', async () => {
+  const written: Partial<Prefs>[] = [];
+  const prefs: PrefsStore = {
+    async read() {
+      return { focusWidth: 820 };
+    },
+    async write(change) {
+      written.push(change);
+    },
+  };
+  const store = createStore(disk([draft({})]).store, prefs, 'system');
+  assert.equal(store.state.focusWidth, null);
+  await store.load(() => '');
+  assert.equal(store.state.focusWidth, 820);
+  store.setFocusWidth(null);
+  assert.deepEqual(written.at(-1), { focusWidth: null });
+});
+
+test('the reading typeface comes back from the preferences and is saved', async () => {
+  const written: Partial<Prefs>[] = [];
+  const prefs: PrefsStore = {
+    async read() {
+      return { readingFont: 'serif' };
+    },
+    async write(change) {
+      written.push(change);
+    },
+  };
+  const store = createStore(disk([draft({})]).store, prefs, 'system');
+  assert.equal(store.state.readingFont, 'sans');
+  await store.load(() => '');
+  assert.equal(store.state.readingFont, 'serif');
+  store.setReadingFont('sans');
+  assert.deepEqual(written.at(-1), { readingFont: 'sans' });
+});
+
+test('line numbers start off, come back from the preferences and are saved', async () => {
+  const written: Partial<Prefs>[] = [];
+  const prefs: PrefsStore = {
+    async read() {
+      return { lineNumbers: true };
+    },
+    async write(change) {
+      written.push(change);
+    },
+  };
+  const store = createStore(disk([draft({})]).store, prefs, 'system');
+  assert.equal(store.state.lineNumbers, false);
+  await store.load(() => '');
+  assert.equal(store.state.lineNumbers, true);
+  store.setLineNumbers(false);
+  assert.deepEqual(written.at(-1), { lineNumbers: false });
 });
 
 test('the find bar closes on the way into the reading view', async () => {

@@ -75,11 +75,20 @@ export interface Editor {
   setCaretMargin(px: number): void;
   setMode(mode: Mode): void;
   setTheme(theme: 'dark' | 'light'): void;
+  /**
+   * Numbers in the source's margin. They take the room the margin already
+   * has, so turning them on does not move the text (`bytemd.css`).
+   */
+  setLineNumbers(on: boolean): void;
+  /** Where the caret is, counted from 1 the way an editor's status bar does. */
+  position(): { line: number; column: number } | null;
   onInput(handler: (text: string, caret: number) => void): void;
   onCaret(handler: (caret: number) => void): void;
   onFocus(handler: () => void): void;
   /** The view switch on ByteMD's toolbar: a click asks for that view. */
   onView(handler: (mode: Mode) => void): void;
+  /** The focus button on ByteMD's toolbar. */
+  onFocusMode(handler: () => void): void;
   /** Scrolls the reading view to a fraction of its height; see `Draft.scroll`. */
   setReadScroll(fraction: number): void;
   /** The writer scrolling the reading view, as a fraction of its height. */
@@ -111,6 +120,8 @@ const EDITOR_MODE = {
  */
 const svg = (body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 48 48" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+/** Four corners, where ByteMD's fullscreen button was: the text alone. */
+const FOCUS_ICON = svg('<path d="M6 17V6h11M31 6h11v11M42 31v11H31M17 42H6V31"/>');
 /** The `?` sheet's icons for the app's own shortcuts, on ByteMD's grid. */
 const HELP_ICONS: Record<string, string> = {
   new: svg('<path d="M28 6H12v36h24V14l-8-8Z"/><path d="M28 6v8h8M24 22v12M18 28h12"/>'),
@@ -132,6 +143,7 @@ const HELP_ICONS: Record<string, string> = {
   open: svg(
     '<rect width="40" height="26" x="4" y="11" rx="3"/><path d="M12 19h2M20 19h2M28 19h2M35 19h1M14 29h20"/>',
   ),
+  focus: FOCUS_ICON,
 };
 /**
  * Whether CodeMirror's markdown mode read this line as a list item: its marker
@@ -186,7 +198,7 @@ function foldRepeatedMarker(cm: CodeMirrorEditor, change: { text: string[] }): v
 
 const viewLabel = (label: string) => `<span class="view-label">${label}</span>`;
 const VIEWS: Mode[] = ['write', 'split', 'read'];
-/** Where ByteMD puts the bridge's buttons; see `bytemd.css`. */
+/** Where ByteMD puts the bridge's buttons; see `bytemd.css`. Focus is at 9. */
 const VIEW_PATH: Record<Mode, string> = { write: '6', split: '7', read: '8' };
 
 /**
@@ -268,6 +280,7 @@ export function createEditor(
   const focusHandlers: (() => void)[] = [];
   const viewHandlers: ((mode: Mode) => void)[] = [];
   const askView = (mode: Mode) => viewHandlers.forEach((handler) => handler(mode));
+  const focusModeHandlers: (() => void)[] = [];
   const scrollHandlers: ((fraction: number) => void)[] = [];
   /**
    * True from the moment a reading position is asked for until it has been
@@ -293,6 +306,20 @@ export function createEditor(
   let loading = false;
   let overlay: object | null = null;
   let current: { clear(): void } | null = null;
+  let lineNumbers = false;
+  /** The line the caret is on, whose number is drawn in full ink. */
+  let caretLine: object | null = null;
+
+  function markCaretLine(): void {
+    if (!cm) return;
+    const line = lineNumbers ? cm.getLineHandle(cm.getCursor().line) : null;
+    if (line === caretLine) return;
+    // A handle from a draft since replaced is no longer in the document, and
+    // CodeMirror leaves it alone.
+    if (caretLine) cm.removeLineClass(caretLine as never, 'gutter', 'is-current');
+    if (line) cm.addLineClass(line, 'gutter', 'is-current');
+    caretLine = line;
+  }
 
   const clamp = (caret: number) => Math.min(Math.max(caret, 0), text.length);
   const caretNow = () => (cm ? cm.indexFromPos(cm.getCursor()) : clamp(text.length));
@@ -311,7 +338,7 @@ export function createEditor(
    * are the only thing ByteMD lets in beside its own. ByteMD `unshift`s each
    * one, so the list is written in display order and reversed on the way in;
    * they land after ByteMD's six built-ins — write, split and read at indexes
-   * 6, 7 and 8 — which is how `bytemd.css` finds them.
+   * 6, 7 and 8, focus at 9 — which is how `bytemd.css` finds them.
    */
   const viewTitles: Record<Mode, string> = {
     write: strings.viewWriteTitle,
@@ -324,12 +351,23 @@ export function createEditor(
     read: strings.viewRead,
   };
   const bridge: BytemdPlugin = {
-    actions: VIEWS.map((view) => ({
-      position: 'right' as const,
-      title: viewTitles[view],
-      icon: viewLabel(viewNames[view]),
-      handler: { type: 'action' as const, click: () => askView(view) },
-    })).reverse(),
+    actions: [
+      ...VIEWS.map((view) => ({
+        position: 'right' as const,
+        title: viewTitles[view],
+        icon: viewLabel(viewNames[view]),
+        handler: { type: 'action' as const, click: () => askView(view) },
+      })),
+      {
+        position: 'right' as const,
+        title: strings.focusTitle,
+        icon: FOCUS_ICON,
+        handler: {
+          type: 'action' as const,
+          click: () => focusModeHandlers.forEach((handler) => handler()),
+        },
+      },
+    ].reverse(),
     viewerEffect({ markdownBody }) {
       addCopyButtons(markdownBody);
     },
@@ -345,6 +383,7 @@ export function createEditor(
       // over the draft's own and scheduled a save for a draft nobody edited —
       // which is what discarded the pending write of the draft being left.
       editor.on('cursorActivity', () => {
+        markCaretLine();
         if (loading) return;
         for (const handler of caretHandlers) handler(caretNow());
       });
@@ -362,6 +401,14 @@ export function createEditor(
         editor.focus();
       }
       if (caretMargin) editor.setOption('cursorScrollMargin', caretMargin);
+      if (lineNumbers) {
+        editor.setOption('lineNumbers', true);
+        markCaretLine();
+        // Turned on before the editor is laid out, the numbers' column
+        // measures nothing: they were drawn over the text, and wrapped lines
+        // put them out of step. Measured again once there is a layout.
+        requestAnimationFrame(() => editor.refresh());
+      }
     },
   };
 
@@ -491,6 +538,13 @@ export function createEditor(
       preview?.querySelector(`[id="${CSS.escape(id)}"]`) ??
       preview?.querySelector(`[id="user-content-${CSS.escape(id)}"]`);
     target?.scrollIntoView({ block: 'start' });
+  });
+
+  // The numbers' column is the margin's width, which narrows at 1100px.
+  // CodeMirror sizes the text beside it only when it measures, so it is asked
+  // to measure again when the margin changes.
+  window.matchMedia('(max-width: 1100px)').addEventListener('change', () => {
+    if (lineNumbers) cm?.refresh();
   });
 
   const preview = () => host.querySelector<HTMLElement>('.bytemd-preview');
@@ -645,6 +699,20 @@ export function createEditor(
     onCaret: (handler) => caretHandlers.push(handler),
     onFocus: (handler) => focusHandlers.push(handler),
     onView: (handler) => viewHandlers.push(handler),
+    onFocusMode: (handler) => focusModeHandlers.push(handler),
+    setLineNumbers(on) {
+      if (on === lineNumbers) return;
+      lineNumbers = on;
+      host.toggleAttribute('data-line-numbers', on);
+      if (!cm) return;
+      cm.setOption('lineNumbers', on);
+      markCaretLine();
+    },
+    position() {
+      if (!cm) return null;
+      const { line, ch } = cm.getCursor();
+      return { line: line + 1, column: ch + 1 };
+    },
     // Two frames: the first lets the re-render `setMode` asked for land and
     // be laid out, the second lets the scroll it causes be swallowed.
     setReadScroll(fraction) {
