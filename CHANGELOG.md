@@ -218,9 +218,9 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.4.0...HEAD
-[1.4.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/m4rcone/scratchpad-newtab/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/m4rcone/scratchpad-newtab/releases/tag/v1.0.0
+[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/m4rcone/scratchpad/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/m4rcone/scratchpad/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/m4rcone/scratchpad/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/m4rcone/scratchpad/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/m4rcone/scratchpad/releases/tag/v1.0.0

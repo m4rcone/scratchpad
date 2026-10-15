@@ -1,17 +1,17 @@
 name: Bug report
-description: Something behaves differently than the README says it does.
+description: Something does not work as the README describes.
 labels: ['bug']
 body:
   - type: markdown
     attributes:
       value: |
-        Losing text is the bug that matters most here. If that is what happened,
-        say so first — what you typed and when the tab closed.
+        Lost text is the most serious bug here. If that happened, say so first:
+        what you typed and when the tab closed.
   - type: textarea
     id: what-happened
     attributes:
       label: What happened
-      description: And what you expected instead.
+      description: Include what you expected instead.
     validations:
       required: true
   - type: textarea
@@ -29,7 +29,7 @@ body:
     attributes:
       label: Extension version
       description: From `chrome://extensions`, or the commit you built from.
-      placeholder: '1.1.0'
+      placeholder: '1.5.0'
     validations:
       required: true
   - type: input
@@ -42,8 +42,8 @@ body:
   - type: textarea
     id: draft
     attributes:
-      label: The draft that triggers it, if the preview is involved
-      description: Paste the markdown. It helps most for maths, mermaid or embedded HTML.
+      label: Draft that triggers it
+      description: For preview issues, paste the markdown — especially maths, mermaid or embedded HTML.
       render: markdown
     validations:
       required: false
@@ -51,7 +51,7 @@ body:
     id: console
     attributes:
       label: Console errors
-      description: Right-click the scratchpad page, Inspect, Console tab.
+      description: Right-click the page, choose Inspect, then open the Console tab.
       render: text
     validations:
       required: false

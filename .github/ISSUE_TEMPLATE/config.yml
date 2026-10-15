@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/m4rcone/scratchpad-newtab/security/advisories/new
+    url: https://github.com/m4rcone/scratchpad/security/advisories/new
     about: Report it privately, never as a public issue.

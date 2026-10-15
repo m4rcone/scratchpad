@@ -22,9 +22,8 @@ export interface PendingRestore {
   preview: ImportPreview;
 }
 
-const CHANGELOG_URL =
-  'https://github.com/m4rcone/scratchpad-newtab/blob/main/CHANGELOG.md';
-const PRIVACY_URL = 'https://github.com/m4rcone/scratchpad-newtab/blob/main/PRIVACY.md';
+const CHANGELOG_URL = 'https://github.com/m4rcone/scratchpad/blob/main/CHANGELOG.md';
+const PRIVACY_URL = 'https://github.com/m4rcone/scratchpad/blob/main/PRIVACY.md';
 const SUPPORT_URL = 'https://ko-fi.com/m4rcone';
 
 /**
