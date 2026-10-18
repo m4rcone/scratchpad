@@ -78,6 +78,27 @@ test('with no query the snippet is the body, not the title again', () => {
   assert.equal(snippetOf('title\n## part two\nmore', ''), 'part two more');
 });
 
+test('front matter names the draft with its title, or its name', () => {
+  assert.equal(
+    titleOf('---\ntitle: My post\ndate: 2026-10-16\n---\n# Heading'),
+    'My post',
+  );
+  assert.equal(titleOf('---\nname: pdf-skill\ndescription: x\n---\nbody'), 'pdf-skill');
+  assert.equal(titleOf('---\nname: a\ntitle: "Quoted"\n---\nbody'), 'Quoted');
+  assert.equal(titleOf("---\ntitle: 'single'\n---"), 'single');
+  // Nested keys, empty values and multi-line ones name nothing.
+  assert.equal(titleOf('---\nmeta:\n  title: nested\n---\n# Heading'), 'Heading');
+  assert.equal(titleOf('---\ntitle:\n---\n# Heading'), 'Heading');
+  assert.equal(titleOf('---\ntitle: |\n  long\n---\n# Heading'), 'Heading');
+  // Without front matter, `---` is a rule and the first line as ever.
+  assert.equal(titleOf('---\n# Heading'), '---');
+});
+
+test('with front matter the snippet starts after it', () => {
+  assert.equal(snippetOf('---\ntitle: Post\n---\n# Intro\ntext', ''), 'Intro text');
+  assert.equal(snippetOf('---\ndate: today\n---\n# Intro\ntext', ''), 'text');
+});
+
 test('word count ignores surrounding space', () => {
   assert.equal(wordCount('  one   two \n three '), 3);
   assert.equal(wordCount('   '), 0);

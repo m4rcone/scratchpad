@@ -6,9 +6,7 @@
  * Both are pure, over the lines of text; `editor.ts` calls them, and only on
  * lines CodeMirror has already read as a list, so a code block is left alone.
  */
-
-/** A list item's lead: quote marks, indent, marker, and a task box if any. */
-const ITEM = /^((?:\s*>)*)(\s*)([-*+]|\d+[.)])( \[[ xX]\])? /;
+import { isBullet, isNumber, parseLine, readBox } from './syntax.ts';
 
 /**
  * The marker typed again by habit right after enter had written it — `- - `,
@@ -17,12 +15,23 @@ const ITEM = /^((?:\s*>)*)(\s*)([-*+]|\d+[.)])( \[[ xX]\])? /;
  * enter wrote, since `[x]` there was meant.
  */
 export function collapseRepeatedMarker(line: string): string | null {
-  const bullet = /^((?:\s*>)*\s*)([-*+]) (\[[ xX]\] )?[-*+] $/.exec(line);
-  if (bullet) return `${bullet[1]}${bullet[2]} ${bullet[3] ?? ''}`;
-  const box = /^((?:\s*>)*\s*[-*+] )\[[ xX]\] (\[[ xX]\]) $/.exec(line);
-  if (box) return `${box[1]}${box[2]} `;
-  const ordered = /^((?:\s*>)*\s*)(\d+[.)]) \d+[.)] $/.exec(line);
-  if (ordered) return `${ordered[1]}${ordered[2]} `;
+  // Only right after the space that follows the second one: `- -` may still
+  // become `- --flag`.
+  if (!line.endsWith(' ')) return null;
+  const p = parseLine(line);
+  const lead = p.quote + p.indent;
+  const again = parseLine(p.rest);
+  const bare = again.box === null && again.rest === '';
+  if (isBullet(p.marker) && isBullet(again.marker) && bare) {
+    return `${lead}${p.marker} ${p.box === null ? '' : `[${p.box}] `}`;
+  }
+  const typed = readBox(p.rest);
+  if (isBullet(p.marker) && p.box !== null && typed?.rest === '') {
+    return `${lead}${p.marker} [${typed.box}] `;
+  }
+  if (isNumber(p.marker) && p.box === null && isNumber(again.marker) && bare) {
+    return `${lead}${p.marker} `;
+  }
   return null;
 }
 
@@ -33,26 +42,23 @@ export function collapseRepeatedMarker(line: string): string | null {
  * nested item, or no parent is found above it; enter then does what it does.
  */
 export function outdentEmptyItem(lines: string[], index: number): string | null {
-  const line = lines[index] ?? '';
-  const empty = /^((?:\s*>)*)(\s+)([-*+]|\d+[.)])( \[[ xX]\])?\s*$/.exec(line);
-  if (!empty) return null;
-  const [, quote, indent] = empty;
+  const empty = parseLine(lines[index] ?? '');
+  if (!empty.marker || !empty.indent || empty.rest.trim()) return null;
 
   for (let i = index - 1; i >= 0; i--) {
     const above = lines[i]!;
     if (!above.trim()) continue;
-    const item = ITEM.exec(above);
-    if (!item) {
+    const item = parseLine(above);
+    if (!item.marker) {
       // A line of the list's text, indented under an item, is passed over;
       // anything back at the margin is the end of the list.
       if (/^\s/.test(above)) continue;
       return null;
     }
-    const [, , parentIndent, marker, box] = item;
-    if (parentIndent!.length >= indent!.length) continue;
-    const ordered = /^(\d+)([.)])$/.exec(marker!);
-    const next = ordered ? `${Number(ordered[1]) + 1}${ordered[2]}` : marker;
-    return `${quote}${parentIndent}${next}${box ? ' [ ]' : ''} `;
+    if (item.indent.length >= empty.indent.length) continue;
+    const ordered = /^(\d+)([.)])$/.exec(item.marker);
+    const next = ordered ? `${Number(ordered[1]) + 1}${ordered[2]}` : item.marker;
+    return `${empty.quote}${item.indent}${next}${item.box === null ? '' : ' [ ]'} `;
   }
   return null;
 }

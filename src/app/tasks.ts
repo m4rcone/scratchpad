@@ -9,6 +9,7 @@
  * keystroke behind the text finds nothing to tick instead of the wrong box.
  */
 import type { HastNode } from './images.ts';
+import { parseLine } from './syntax.ts';
 
 const isTaskItem = (node: HastNode) =>
   node.tagName === 'li' &&
@@ -49,8 +50,11 @@ export function toggleTask(
   text: string,
   at: number,
 ): { from: number; to: number; text: string } | null {
-  const lead = /^(?:[-*+]|\d+[.)])[ \t]+\[([ xX])\]/.exec(text.slice(at, at + 64));
-  if (!lead) return null;
-  const from = at + lead[0].length - 2;
-  return { from, to: from + 1, text: lead[1] === ' ' ? 'x' : ' ' };
+  const end = text.indexOf('\n', at);
+  const line = text.slice(at, end < 0 ? text.length : end);
+  const item = parseLine(line);
+  if (item.box === null || item.quote || item.indent) return null;
+  // Past the marker, only space comes before the box.
+  const from = at + line.indexOf('[', item.marker!.length) + 1;
+  return { from, to: from + 1, text: item.box === ' ' ? 'x' : ' ' };
 }

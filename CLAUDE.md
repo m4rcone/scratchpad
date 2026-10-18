@@ -31,7 +31,10 @@ Editor and preview are [ByteMD](https://bytemd.js.org/) (CodeMirror 5, remark,
 rehype) with six plugins: `gfm`, `highlight-ssr`, `math`, `mermaid`, `breaks`,
 `gemoji`. `src/app/editor.ts` wraps the component and hand-types the slice of
 its Svelte API it uses (Svelte is not installed). `src/app/plugins.ts` is the
-only place that decides what markdown means here.
+only place that decides how markdown renders. `src/app/syntax.ts` is the only
+place that reads markdown by hand, outside the parse: a line's lead (quote,
+indent, list marker, task box, heading) and front matter, for the toolbar, list
+continuation, task boxes, titles and the editor's YAML colouring.
 
 The app owns the view state: `data-mode` is `write`, `split` or `read`. Focus
 is independent of it: `data-focus` on the shell, in any view.

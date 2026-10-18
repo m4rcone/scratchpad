@@ -12,7 +12,7 @@ network: your drafts never leave your machine.
 
 ![Scratchpad: markdown notes, one click away. No account, no network. Beside it, the app in split view, the markdown source on the left and the rendered preview on the right](.github/banner.png)
 
-Version **1.5.0**.
+Version **1.6.0**.
 
 ## Principles
 
@@ -31,9 +31,10 @@ Version **1.5.0**.
 - **Focus.** The text alone, in any view, at a width you set by dragging.
 - **Rich preview.** GitHub-flavoured markdown, code highlighting, LaTeX,
   mermaid and `:emoji:`, with embedded HTML sanitized. Task boxes tick from
-  the preview.
-- **Drafts.** Titled by their first line, with full-text search, find and
-  replace, and undo after delete. Two open tabs stay in sync.
+  the preview. Front matter is coloured as YAML and left out of the preview.
+- **Drafts.** Titled by their first line, or their front matter's `title:`
+  or `name:`, with full-text search, find and replace, and undo after delete.
+  Two open tabs stay in sync.
 - **Status bar.** Save state, view, line and column, words and a rough token
   count. Optional line numbers in the margin.
 - **Import and export.** Copy or export a draft as `.md`, drop a `.md` or
