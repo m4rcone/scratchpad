@@ -35,6 +35,19 @@ export const strings = {
   modeLabel: { write: 'write', split: 'split', read: 'read' },
   position: (line: number, column: number) => `Ln ${line}, Col ${column}`,
   toolbarLabel: 'formatting and views',
+  /**
+   * Written between a format's markers where there is no word to wrap, and
+   * selected to be typed over; keyed by the opening marker.
+   */
+  formatPlaceholders: {
+    '**': 'bold text',
+    '*': 'italic text',
+    '~~': 'strikethrough',
+    '`': 'code',
+    $: 'formula',
+    '[': 'link text',
+  } as Record<string, string>,
+  formatPlaceholder: 'text',
   appName: 'Scratchpad',
   close: 'close',
   /** Beside every close: the key that does the same. */

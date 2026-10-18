@@ -2,6 +2,8 @@
 import type { Draft } from '../storage/types.ts';
 import { SCHEMA_VERSION } from '../storage/types.ts';
 import { strings } from './strings.ts';
+import { parseLine, readFrontMatter } from './syntax.ts';
+import type { FrontMatter } from './syntax.ts';
 
 export function newDraft(text = ''): Draft {
   const now = Date.now();
@@ -16,22 +18,38 @@ export function newDraft(text = ''): Draft {
 }
 
 /**
+ * The front matter of the last draft read. The rail and search ask for a
+ * draft's title and then its snippet, and both start from it.
+ */
+let lastRead: { text: string; front: FrontMatter } | null = null;
+
+function frontMatterOf(text: string): FrontMatter {
+  if (lastRead?.text !== text) lastRead = { text, front: readFrontMatter(text) };
+  return lastRead.front;
+}
+
+/**
  * The title is the first non-empty line — never a dialog asking for a name —
  * read the way the preview would show it: without the block marker in front
  * (heading, quote, list, task box) and with inline markup reduced to its text.
  * A draft that opens with `- [ ] ship [the fix](https://…)` is titled
  * "ship the fix", not with the URL. Underscores are left alone, since they are
  * as likely to be `snake_case` as emphasis.
+ *
+ * Front matter is not shown in the preview, so it is not the first line
+ * either: its `title:` or `name:` is the title, and without one the title is
+ * the first line after it.
  */
 export function titleOf(text: string): string {
-  const first = text.split('\n').find((line) => line.trim());
+  const front = frontMatterOf(text);
+  if (front.name) return front.name.slice(0, 46);
+  const first = text
+    .split('\n')
+    .slice(front.lines)
+    .find((line) => line.trim());
   if (!first) return '';
-  return first
-    .trim()
-    .replace(/^#{1,6}(\s+|$)/, '')
-    .replace(/^(>\s*)+/, '')
-    .replace(/^([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, '')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+  return parseLine(first.trim())
+    .body.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
     .replace(/(\*\*|~~|`)/g, '')
     .replace(/(^|\s)\*(\S(?:.*?\S)?)\*(?=\s|$|[.,;:!?])/g, '$1$2')
@@ -106,10 +124,12 @@ export function snippetOf(text: string, query: string): string {
   const limit = 78;
   const needle = needleOf(query);
   if (!needle) {
-    const lines = text.split('\n');
-    const body = flatten(
-      lines.slice(lines.findIndex((line) => line.trim()) + 1).join('\n'),
-    );
+    // After the front matter, and after the line the title came from, if it
+    // came from one: the title's own line is already printed above.
+    const front = frontMatterOf(text);
+    const lines = text.split('\n').slice(front.lines);
+    const first = front.name ? 0 : lines.findIndex((line) => line.trim()) + 1;
+    const body = flatten(lines.slice(first).join('\n'));
     return body.slice(0, limit) + (body.length > limit ? '…' : '');
   }
   const { text: haystack, at: from } = fold(flat);

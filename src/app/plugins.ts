@@ -1,7 +1,7 @@
 /**
- * The ByteMD plugin set, and the only place that decides what markdown means
- * here. Each entry is a dependency with a weight, so the list is short on
- * purpose.
+ * The ByteMD plugin set, and the only place that decides how markdown
+ * renders here; what the app reads from the text by hand is `syntax.ts`.
+ * Each entry is a dependency with a weight, so the list is short on purpose.
  *
  * The list is rebuilt when the theme changes, because mermaid bakes colours
  * into the SVG it draws and cannot be restyled from CSS afterwards.
@@ -15,6 +15,7 @@ import math from '@bytemd/plugin-math';
 import mermaid from '@bytemd/plugin-mermaid';
 import { imagePlaceholders } from './images.ts';
 import type { HastNode } from './images.ts';
+import { blankFrontMatter } from './syntax.ts';
 import { enableTaskBoxes } from './tasks.ts';
 
 // KaTeX's own stylesheet. The maths engine itself is behind a dynamic import
@@ -25,6 +26,21 @@ import 'katex/dist/katex.min.css';
 const noRemoteImages: BytemdPlugin = {
   rehype: (processor) =>
     processor.use(() => (tree: unknown) => imagePlaceholders(tree as HastNode)),
+};
+
+/**
+ * Front matter — the `---` block of YAML a post, a skill or an agent file
+ * opens with — is not drawn: the preview starts at the text. The parser is
+ * handed the draft with those lines blank (`blankFrontMatter`); the editor
+ * colours the same block as YAML (`editor.ts`).
+ */
+type ParseFunction = (doc: string, file: unknown) => unknown;
+const frontMatter: BytemdPlugin = {
+  remark: (processor) =>
+    processor.use(function (this: { Parser?: unknown }) {
+      const parse = this.Parser as ParseFunction;
+      this.Parser = (doc: string, file: unknown) => parse(blankFrontMatter(doc), file);
+    }),
 };
 
 /** See `tasks.ts`: task boxes that tick, written back into the text. */
@@ -43,6 +59,7 @@ export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
     mermaid({ theme: theme === 'dark' ? 'dark' : 'default' }),
     breaks(),
     gemoji(),
+    frontMatter,
     noRemoteImages,
     taskBoxes,
   ];

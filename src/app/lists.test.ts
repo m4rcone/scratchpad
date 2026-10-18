@@ -53,3 +53,15 @@ test('a top-level empty item, or one with no parent, is left to enter', () => {
   assert.equal(outdentEmptyItem(['text', '  - '], 1), null);
   assert.equal(outdentEmptyItem(['- a', '  - b', '  - c'], 2), null);
 });
+
+test('a marker with more space after it, or a nine-digit number, is still one', () => {
+  assert.equal(collapseRepeatedMarker('-  - '), '- ');
+  assert.equal(collapseRepeatedMarker('123456789. 1. '), '123456789. ');
+  assert.equal(collapseRepeatedMarker('1234567890. 1. '), null);
+});
+
+test('the second marker is only folded once its space is typed', () => {
+  assert.equal(collapseRepeatedMarker('- -'), null);
+  assert.equal(collapseRepeatedMarker('- - [ ] '), null);
+  assert.equal(collapseRepeatedMarker('1. -  '), null);
+});

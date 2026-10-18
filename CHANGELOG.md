@@ -5,6 +5,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Changed
+
+- The list, numbered list, task and quote buttons toggle and convert: a list
+  item clicked as a list loses its marker, a bullet clicked as numbered
+  becomes numbered. A heading takes a list item's place instead of being
+  written in front of its marker, and a marker goes after the line's indent.
+- The code block button wraps the selected lines in a fence.
+
+### Fixed
+
+- Numbers of seven digits or more, and `#123`, were styled as links in the
+  editor.
+- Front matter — a draft opening with a `---` block of YAML, as posts, skills
+  and agent files do — is coloured as YAML in the editor and left out of the
+  preview. It used to be YAML in the editor but a rule and a heading in the
+  preview, and a `---` that opened a draft as a rule turned the whole draft
+  into YAML. Only a block that reads as YAML counts, so a draft that opens
+  with a rule and uses more as separators stays prose. Its `title:` or
+  `name:` is the draft's title.
+- Strikethrough, bold or inline maths on an empty line wrote `~~~~`, `****`
+  or `$$`, which opened a block down to the end of the draft. A placeholder
+  to type over is written instead.
+- Code block, table, block formula and diagram inserted at the end of a draft
+  selected the line below the one meant, so typing broke the block.
+- Bold, italic and the like across lines wrap each line instead of writing one
+  pair of markers around a line break, which rendered as nothing; a second
+  click takes them off again.
+- A triple-clicked line, formatted from the toolbar, no longer brings the next
+  line in with it.
+- Every selection is formatted, not only the first.
+
 ## [1.5.0] — 2026-10-15
 
 ### Added

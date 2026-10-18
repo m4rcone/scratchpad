@@ -14,6 +14,8 @@ import type { Editor as CodeMirrorEditor } from 'codemirror';
 import { markdownPlugins } from './plugins.ts';
 import type { Mode } from './store.ts';
 import { findAll } from './find.ts';
+import { editorUtils } from './format.ts';
+import { frontMatterLines } from './syntax.ts';
 import { formatChord } from './platform.ts';
 import { strings } from './strings.ts';
 import { keyboardToolbar } from './toolbar.ts';
@@ -102,15 +104,29 @@ export interface Editor {
  * leave the words alone. The overrides rename the classes the mode borrows from
  * programming languages: list levels would otherwise arrive as `variable-2`,
  * `variable-3` and `keyword`, and emoji as `builtin`.
+ *
+ * `gitHubSpice` is off because it styles any run of 7 to 40 hex digits as a
+ * commit hash and `#123` as an issue — a phone number looked like a link — and
+ * the preview links neither.
  */
-const EDITOR_MODE = {
+const MARKDOWN_MODE = {
+  name: 'gfm',
+  highlightFormatting: true,
+  gitHubSpice: false,
+  tokenTypeOverrides: { list1: 'list', list2: 'list', list3: 'list', emoji: 'emoji' },
+};
+
+/**
+ * The same, under a front matter coloured as YAML. CodeMirror's mode reads
+ * lines in order and cannot look ahead: it takes a first `---` as the start of
+ * one and colours everything as YAML until a closing line — the whole draft,
+ * when that `---` was a rule. So it is switched on only while the draft has a
+ * closed front matter, by the rule the preview hides it by (`model.ts`).
+ */
+const FRONT_MATTER_MODE = {
   name: 'yaml-frontmatter',
   // Typed as a mode name, but `getMode` resolves a whole spec here as well.
-  base: {
-    name: 'gfm',
-    highlightFormatting: true,
-    tokenTypeOverrides: { list1: 'list', list2: 'list', list3: 'list', emoji: 'emoji' },
-  } as unknown as string,
+  base: MARKDOWN_MODE as unknown as string,
 };
 
 /**
@@ -310,6 +326,17 @@ export function createEditor(
   /** The line the caret is on, whose number is drawn in full ink. */
   let caretLine: object | null = null;
 
+  /** Whether the editor is in `FRONT_MATTER_MODE`. */
+  let frontMatter = false;
+
+  /** Front matter coloured as YAML while the draft has one, and only then. */
+  function matchFrontMatter(): void {
+    const on = frontMatterLines(text) > 0;
+    if (!cm || on === frontMatter) return;
+    frontMatter = on;
+    cm.setOption('mode', on ? FRONT_MATTER_MODE : MARKDOWN_MODE);
+  }
+
   function markCaretLine(): void {
     if (!cm) return;
     const line = lineNumbers ? cm.getLineHandle(cm.getCursor().line) : null;
@@ -371,13 +398,21 @@ export function createEditor(
     viewerEffect({ markdownBody }) {
       addCopyButtons(markdownBody);
     },
-    editorEffect({ editor }) {
+    editorEffect(context) {
+      const { editor } = context;
+      // The context is one object, shared by the toolbar, the shortcuts and
+      // every plugin: the formatting helpers on it are swapped for ours
+      // (`format.ts`), and every action reads them from it when it runs.
+      // Again on every call, in case ByteMD built a new one.
+      Object.assign(context, editorUtils(context.codemirror, editor));
       // Every plugin change redraws the toolbar and may redraw the sheet.
       markViews();
       toolbar?.refresh();
       addAppShortcuts(host);
       if (cm === editor) return;
       cm = editor;
+      frontMatter = false;
+      matchFrontMatter();
       // `setValue` drops the cursor at 0,0 and fires `cursorActivity` before
       // `placeCaret` puts it back, so an unguarded handler persisted caret 0
       // over the draft's own and scheduled a save for a draft nobody edited —
@@ -450,7 +485,7 @@ export function createEditor(
       plugins: withBridge(theme),
       placeholder: strings.emptyHint,
       editorConfig: {
-        mode: EDITOR_MODE,
+        mode: MARKDOWN_MODE,
         // Two spaces, never a tab: the same indent the exported `.md` carries.
         tabSize: 2,
         indentUnit: 2,
@@ -466,6 +501,7 @@ export function createEditor(
 
   component.$on('change', (event: CustomEvent<{ value: string }>) => {
     text = event.detail.value;
+    matchFrontMatter();
     // ByteMD is a controlled component: keeping the prop equal to what was
     // typed stops the next unrelated `$set` from resurrecting a stale value.
     component.$set({ value: text });
