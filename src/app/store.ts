@@ -11,7 +11,13 @@ import type {
   ReadingFont,
   ThemeChoice,
 } from '../storage/types.ts';
-import { newDraft } from './model.ts';
+import {
+  hasNewerName,
+  hasNewerText,
+  mergeDraft,
+  renamedLater,
+} from '../storage/merge.ts';
+import { cleanName, newDraft, titleOf } from './model.ts';
 
 /**
  * What the editor pane shows: the source alone, the source with the preview
@@ -41,6 +47,8 @@ export interface State {
   settingsOpen: boolean;
   /** The drafts list, when it is an overlay (narrow screens) rather than a rail. */
   railOpen: boolean;
+  /** The draft whose name is being typed in the rail, in place of its title. */
+  renaming: string | null;
   query: string;
   cursor: number;
   status: string;
@@ -136,6 +144,7 @@ export function createStore(
     findOpen: false,
     settingsOpen: false,
     railOpen: false,
+    renaming: null,
     query: '',
     cursor: 0,
     status: '',
@@ -294,16 +303,21 @@ export function createStore(
       state.drafts.push({ ...incoming });
       return 'added';
     }
-    if (local.updatedAt >= incoming.updatedAt || local.text === incoming.text)
-      return 'kept';
+    // The text and the name are weighed apart (`merge.ts`): a rename comes
+    // with the same text, and must still get here.
+    const newerText = hasNewerText(local, incoming);
+    if (!newerText && !hasNewerName(local, incoming)) return 'kept';
     const { caret, scroll } = local;
-    Object.assign(local, incoming);
+    const merged = mergeDraft(local, incoming, newerText);
+    for (const key of Object.keys(local) as (keyof Draft)[])
+      if (!(key in merged)) delete local[key];
+    Object.assign(local, merged);
     if (local.id === state.activeId) {
       if (caret === undefined) delete local.caret;
       else local.caret = caret;
       if (scroll === undefined) delete local.scroll;
       else local.scroll = scroll;
-      state.replaced += 1;
+      if (newerText) state.replaced += 1;
     }
     return 'updated';
   }
@@ -322,9 +336,18 @@ export function createStore(
         state.drafts.some((draft) => draft.text === incoming.text);
       return here ? 'same' : 'added';
     }
-    if (local.text === incoming.text || local.updatedAt >= incoming.updatedAt)
-      return 'same';
-    return 'updated';
+    return hasNewerText(local, incoming) || hasNewerName(local, incoming)
+      ? 'updated'
+      : 'same';
+  }
+
+  /**
+   * Whether a draft holds anything to keep: text, or a name given to it on
+   * purpose. Only a draft with neither is cleared away, or deleted without
+   * the offer to bring it back.
+   */
+  function worthKeeping(draft: Draft): boolean {
+    return !!draft.text.trim() || !!draft.name;
   }
 
   /**
@@ -333,7 +356,7 @@ export function createStore(
    */
   function dropIfEmpty(id: string | null) {
     const draft = state.drafts.find((other) => other.id === id);
-    if (!draft || draft.text.trim()) return;
+    if (!draft || worthKeeping(draft)) return;
     state.drafts = state.drafts.filter((other) => other !== draft);
     if (dirty.delete(draft.id)) mirror();
     syncSaving();
@@ -361,6 +384,7 @@ export function createStore(
     state.searchOpen = false;
     closeSettings();
     state.railOpen = false;
+    state.renaming = null;
     state.query = '';
     state.pendingDelete = false;
   }
@@ -374,8 +398,8 @@ export function createStore(
   function forget(id: string, ifEmpty = false) {
     const local = state.drafts.find((draft) => draft.id === id);
     if (!local) return;
-    if (ifEmpty && (local.text.trim() || id === state.activeId)) {
-      if (local.text.trim()) scheduleSave(local);
+    if (ifEmpty && (worthKeeping(local) || id === state.activeId)) {
+      if (worthKeeping(local)) scheduleSave(local);
       return;
     }
     state.drafts = state.drafts.filter((draft) => draft !== local);
@@ -396,11 +420,11 @@ export function createStore(
   /** The blank another tab wrote arrived: the stand-in here gives way to it. */
   function giveWay(incoming: Draft) {
     const stand = state.drafts.find((draft) => draft.id === standIn);
-    if (!stand || stand.text.trim()) {
+    if (!stand || worthKeeping(stand)) {
       standIn = null;
       return;
     }
-    if (incoming.text.trim()) return;
+    if (worthKeeping(incoming)) return;
     standIn = null;
     if (state.activeId === stand.id) state.activeId = incoming.id;
     dropIfEmpty(stand.id);
@@ -458,12 +482,12 @@ export function createStore(
       // knows how to hold on and try again.
       for (const pending of readMirror()) {
         const known = state.drafts.find((draft) => draft.id === pending.id);
-        if (known && known.updatedAt > pending.updatedAt) continue;
-        state.drafts = [
-          pending,
-          ...state.drafts.filter((draft) => draft.id !== pending.id),
-        ];
-        scheduleSave(pending);
+        const textWins = !known || known.updatedAt <= pending.updatedAt;
+        // A rename waiting in the mirror is kept even under newer text.
+        if (!textWins && !renamedLater(pending, known)) continue;
+        const kept = known ? mergeDraft(known, pending, textWins) : pending;
+        state.drafts = [kept, ...state.drafts.filter((draft) => draft.id !== pending.id)];
+        scheduleSave(kept);
       }
       // Drops whatever the disk had already superseded.
       mirror();
@@ -533,6 +557,44 @@ export function createStore(
       scheduleSave(draft, false);
     },
 
+    /** The rail's title for this draft turns into a field to type a name in. */
+    startRename(id: string) {
+      if (!state.drafts.some((draft) => draft.id === id)) return;
+      state.renaming = id;
+      state.pendingDelete = false;
+      notify();
+    },
+
+    cancelRename() {
+      if (state.renaming === null) return;
+      state.renaming = null;
+      notify();
+    },
+
+    /**
+     * Gives the draft a name, or takes it away when nothing is left of what
+     * was typed. A rename is not an edit: the text, its date and the rail's
+     * order stay as they were, and only the name's own clock moves. It goes
+     * to the mirror like typed text does, since it is as much the writer's.
+     */
+    rename(id: string, typed: string) {
+      state.renaming = null;
+      const draft = state.drafts.find((other) => other.id === id);
+      if (draft) {
+        const name = cleanName(typed);
+        // Typing back the title the text already gives is not naming it.
+        const unchanged =
+          name === draft.name || (!draft.name && name === titleOf(draft.text));
+        if (!unchanged) {
+          if (name && name !== titleOf(draft.text)) draft.name = name;
+          else delete draft.name;
+          draft.nameAt = Math.max(Date.now(), (draft.nameAt ?? 0) + 1);
+          scheduleSave(draft);
+        }
+      }
+      notify();
+    },
+
     open(id: string) {
       // Opening the draft that is already active still means "take me to it":
       // it closes search and leaves preview. Returning early skipped that.
@@ -567,7 +629,7 @@ export function createStore(
     requestDelete(): 'confirm' | 'deleted' {
       const draft = active();
       if (!draft) return 'deleted';
-      if (draft.text.trim() && !state.pendingDelete) {
+      if (worthKeeping(draft) && !state.pendingDelete) {
         state.pendingDelete = true;
         notify();
         return 'confirm';
@@ -602,7 +664,7 @@ export function createStore(
         replacement = fresh.id;
         scheduleSave(fresh);
       }
-      if (draft.text.trim()) {
+      if (worthKeeping(draft)) {
         undo = { draft, replacement };
         state.deleted = true;
         state.deletedAt = Date.now();

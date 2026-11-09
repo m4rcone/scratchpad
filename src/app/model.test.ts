@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cleanName,
   compactCount,
+  draftTitle,
   fold,
   groupByDay,
   isArchive,
@@ -178,4 +180,35 @@ test('the filter, the snippet and the marks fold a query the same way', () => {
   // Spaces around a query are not part of it, here or in the marks.
   assert.ok(matches(draft({ text: 'foo.' }), 'foo '));
   assert.ok(snippetOf('b'.repeat(90) + ' foo.', 'foo ').includes('foo'));
+});
+
+test('a name given by hand is the title, over the first line and front matter', () => {
+  assert.equal(draftTitle({ text: '# heading', name: 'Prompt review' }), 'Prompt review');
+  assert.equal(draftTitle({ text: '---\ntitle: post\n---\nbody', name: 'mine' }), 'mine');
+  assert.equal(draftTitle({ text: '# heading' }), 'heading');
+});
+
+test('a name is tidied to one line, and nothing left means no name', () => {
+  assert.equal(cleanName('  Prompt\n  review\t '), 'Prompt review');
+  assert.equal(cleanName('   '), undefined);
+  assert.equal(cleanName(''), undefined);
+  assert.equal(cleanName('x'.repeat(200))?.length, 80);
+});
+
+test('a named draft exports under its name', () => {
+  assert.equal(slugOf('You are a helpful assistant', 'Revisor de PR'), 'revisor-de-pr');
+  assert.equal(slugOf('# Plan', undefined), 'plan');
+});
+
+test('search finds a draft by its name as well as its text', () => {
+  assert.ok(matches(draft({ text: 'You are a helpful', name: 'Revisão' }), 'revisao'));
+  assert.ok(!matches(draft({ text: 'You are a helpful' }), 'revisao'));
+});
+
+test("a named draft's snippet starts at its first line, which no title took", () => {
+  assert.equal(
+    snippetOf('You are a helpful assistant', '', true),
+    'You are a helpful assistant',
+  );
+  assert.equal(snippetOf('# Plan\n\nship the fix', '', false), 'ship the fix');
 });

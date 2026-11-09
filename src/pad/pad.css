@@ -211,6 +211,20 @@ button {
   padding-top: 24px;
   display: flex;
   flex-direction: column;
+  /* The edge shadow of a wide code block or table (`bytemd.css`), turned on
+     its side: a soft shadow at the top or bottom while drafts still hide
+     there, none at either end of the scroll or when the list fits. */
+  --cover: var(--surface);
+  background:
+    linear-gradient(to bottom, var(--cover) 30%, transparent) top / 100% 40px no-repeat
+      local,
+    linear-gradient(to top, var(--cover) 30%, transparent) bottom / 100% 40px no-repeat
+      local,
+    radial-gradient(farthest-side at 50% 0, var(--scroll-shadow), transparent) top / 100%
+      14px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, var(--scroll-shadow), transparent) bottom /
+      100% 14px no-repeat scroll,
+    var(--cover);
 }
 
 /* The logo, in the dimmed ink of the rail's labels: present, never loud. The
@@ -294,6 +308,7 @@ button {
    part of that inset, so the open draft's accent does not push it over. */
 .rail__row {
   display: flex;
+  width: 100%;
   justify-content: space-between;
   gap: 12px;
   padding: 7px 24px 7px 21px;
@@ -326,6 +341,68 @@ button {
 .rail__time {
   color: var(--mark);
   flex: none;
+}
+
+/*
+ * Renaming. The pencil sits where the time is, over the row's right end, and
+ * takes its place under the pointer or the keyboard: the title never narrows
+ * or moves for it. It is see-through rather than hidden at rest, so tabbing
+ * still reaches it. Its icon's right edge is the row's text edge, 24px in.
+ */
+.rail__item {
+  position: relative;
+}
+
+.rail__rename {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 17px;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mark);
+  opacity: 0;
+}
+
+.rail__item:focus-within .rail__rename {
+  opacity: 1;
+}
+
+.rail__item:focus-within .rail__time {
+  visibility: hidden;
+}
+
+/* Without a pointer to hover, the open draft's pencil stays out. */
+@media (hover: none) {
+  .rail__item.is-active .rail__rename {
+    opacity: 1;
+  }
+
+  .rail__item.is-active .rail__time {
+    visibility: hidden;
+  }
+}
+
+/* The field takes the row's place, in the row's own type and inset, on the
+   open draft's wash: what is typed stands where the title was. */
+.rail__input {
+  display: block;
+  width: 100%;
+  padding: 6px 23px 6px 20px;
+  border: none;
+  border-left: 3px solid var(--accent);
+  border-radius: 0;
+  background: var(--tint);
+  color: var(--ink);
+  font: inherit;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.rail__input::placeholder {
+  color: var(--mark);
 }
 
 /* On the accent's wash the dimmest ink falls under 4.5:1; one step up holds. */
@@ -1505,6 +1582,18 @@ a,
     color: var(--ink);
   }
 
+  .rail__item:hover .rail__rename {
+    opacity: 1;
+  }
+
+  .rail__item:hover .rail__time {
+    visibility: hidden;
+  }
+
+  .rail__rename:hover {
+    color: var(--ink);
+  }
+
   .footer__action:hover,
   .find__icon:hover,
   .settings__close:hover,
@@ -1572,6 +1661,14 @@ a,
     padding: 7px 20px 7px 17px;
   }
 
+  .rail__rename {
+    right: 13px;
+  }
+
+  .rail__input {
+    padding: 6px 19px 6px 16px;
+  }
+
   .rail__foot {
     padding-left: 20px;
     padding-right: 20px;
@@ -1637,6 +1734,18 @@ a,
 
   .rail__row {
     padding-left: calc(var(--gutter) - 3px);
+  }
+
+  .rail__rename {
+    right: calc(var(--gutter) - 7px);
+    width: 44px;
+    justify-content: flex-end;
+    padding-right: 7px;
+  }
+
+  .rail__input {
+    min-height: 44px;
+    padding: 11px calc(var(--gutter) - 1px) 11px calc(var(--gutter) - 4px);
   }
 
   .rail__foot {

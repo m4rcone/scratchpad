@@ -39,6 +39,29 @@ continuation, task boxes, titles and the editor's YAML colouring.
 The app owns the view state: `data-mode` is `write`, `split` or `read`. Focus
 is independent of it: `data-focus` on the shell, in any view.
 
+A draft's text and its name change apart, so each has its own clock:
+`updatedAt` dates the text and orders the rail, `nameAt` dates the name.
+`src/storage/merge.ts` puts two copies together field by field, and every
+place copies meet goes through it: another tab's copy (`adopt`), the disk's
+guard in `put`, a restore (`classify`) and the boot mirror. A new per-draft
+field that can change without the text needs a clock of its own and a place
+in `mergeDraft`, or it is dropped on its way to the other tab, the disk or a
+backup. Bumping `updatedAt` instead moves the draft to the top of the rail.
+
+The toolbar and footer float over the text (`--toolbar-h`, `--footer-h`).
+Anything scrolled to a target — a contents entry, a link, a revealed row —
+has to clear them.
+
+The rail repaints by rebuilding its `innerHTML` when the markup differs. That
+resets the list's scroll and destroys any field in it, so `rail.ts` keeps the
+scroll across the rebuild and does not rebuild while a rename field is open.
+
+The contents drawer is ByteMD's, but where an entry leads and which one is lit
+are the app's: ByteMD counts every heading in the preview, including ones in
+quotes and lists, and does nothing in `write`. `src/app/toc.ts` marks the
+headings the drawer lists with their source offset (`data-heading-at`), and
+`editor.ts` takes over the click and the highlight.
+
 ByteMD's right-hand toolbar buttons 2–5 (write only, preview only, fullscreen,
 GitHub) are hidden in `bytemd.css`. The app's write/split/read switch comes
 from the bridge plugin in `editor.ts` at indexes 6, 7 and 8, with focus at 9.
@@ -55,10 +78,15 @@ widgets on top of CodeMirror 5. Reading happens in the `read` view.
 - Before adding a shortcut, check ByteMD's toolbar actions and CodeMirror's
   `macDefault`/`pcDefault`: the editor gets the key before the page, so a
   shared chord is lost.
+- Shortcut labels follow the OS — `⌘⇧F` on macOS, `Ctrl+Shift+F` elsewhere —
+  and come from `shortcut` or `formatChord` in `src/app/platform.ts`. Never
+  write the glyphs into a string by hand.
 - `npm test` uses Node's built-in runner, no dependency. Pure behaviour of our
   own (titles, slugs, snippets, grouping, view toggles) lands with a test;
   markdown rendering is ByteMD's and is not tested here.
 - `npm run dev` has no content security policy; check anything network-related
-  on a build.
+  on a build. The Vite root is `src/`, so the page is at `/pad/index.html`.
+  Drafts made there live in the dev server's origin, not the installed
+  extension's.
 - Releases: the same version in `package.json` and `public/manifest.json`
   (integers only), and an entry in `CHANGELOG.md`.

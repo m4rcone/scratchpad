@@ -21,6 +21,7 @@ import { strings } from './strings.ts';
 import { keyboardToolbar } from './toolbar.ts';
 import { collapseRepeatedMarker, outdentEmptyItem } from './lists.ts';
 import { toggleTask } from './tasks.ts';
+import { currentHeading, headingLine } from './toc.ts';
 
 /**
  * ByteMD's own typings extend `SvelteComponentTyped`, which needs the `svelte`
@@ -286,6 +287,17 @@ function addCopyButtons(body: HTMLElement): void {
   }
 }
 
+/**
+ * Scrolls the preview pane until `target` stands `margin` below its top. By
+ * hand rather than with `scrollIntoView`, which, once the pane can go no
+ * further, scrolls every clipped box around it too and leaves the floating
+ * bars out of place.
+ */
+function scrollPaneTo(pane: HTMLElement, target: HTMLElement, margin: number): void {
+  pane.scrollTop +=
+    target.getBoundingClientRect().top - pane.getBoundingClientRect().top - margin;
+}
+
 export function createEditor(
   host: HTMLElement,
   mode: Mode,
@@ -328,6 +340,12 @@ export function createEditor(
 
   /** Whether the editor is in `FRONT_MATTER_MODE`. */
   let frontMatter = false;
+  /**
+   * A pass lighting the contents drawer's current entry is waiting for the
+   * next frame. Up here, with the rest, because the bridge's first render
+   * asks for one before the drawer's code below has run.
+   */
+  let markQueued = false;
 
   /** Front matter coloured as YAML while the draft has one, and only then. */
   function matchFrontMatter(): void {
@@ -397,6 +415,8 @@ export function createEditor(
     ].reverse(),
     viewerEffect({ markdownBody }) {
       addCopyButtons(markdownBody);
+      // The drawer's entries follow the text a tick later; light them after.
+      queueMark();
     },
     editorEffect(context) {
       const { editor } = context;
@@ -573,7 +593,8 @@ export function createEditor(
     const target =
       preview?.querySelector(`[id="${CSS.escape(id)}"]`) ??
       preview?.querySelector(`[id="user-content-${CSS.escape(id)}"]`);
-    target?.scrollIntoView({ block: 'start' });
+    if (preview instanceof HTMLElement && target instanceof HTMLElement)
+      scrollPaneTo(preview, target, headingMargin());
   });
 
   // The numbers' column is the margin's width, which narrows at 1100px.
@@ -600,6 +621,122 @@ export function createEditor(
     },
     { capture: true },
   );
+
+  /*
+   * The contents drawer (`toc.ts`). Its entries are ByteMD's; where a click
+   * goes and which entry is lit are the app's. The nth entry is the nth
+   * heading the parse marked: in the preview it is scrolled to, and in the
+   * write view, where there is no preview, the source is, with the caret put
+   * at the heading.
+   */
+  const entries = () => [...host.querySelectorAll<HTMLElement>('.bytemd-toc li')];
+  const markedHeadings = () => [
+    ...host.querySelectorAll<HTMLElement>('.bytemd-preview [data-heading-at]'),
+  ];
+  const drawerOpen = () =>
+    !!host.querySelector('.bytemd-toc:not(.bytemd-hidden)') &&
+    !host.querySelector('.bytemd-sidebar.bytemd-hidden');
+  /** How far below the pane's top a heading is brought: clear of the toolbar. */
+  const headingMargin = () =>
+    (host.querySelector<HTMLElement>('.bytemd-toolbar')?.offsetHeight ?? 44) + 16;
+
+  /**
+   * The source line a marked heading is on. The marks are a render behind the
+   * text for a moment after each keystroke, so the line is checked against
+   * the text itself (`headingLine`).
+   */
+  const sourceLine = (editor: CodeMirrorEditor, heading: HTMLElement, lines: string[]) =>
+    headingLine(lines, editor.posFromIndex(Number(heading.dataset.headingAt)).line);
+
+  function goToEntry(item: HTMLElement): void {
+    const heading = markedHeadings()[entries().indexOf(item)];
+    if (!heading) return;
+    if (host.dataset.mode !== 'write') {
+      const pane = preview();
+      if (pane) scrollPaneTo(pane, heading, headingMargin());
+    } else if (cm) {
+      const line = sourceLine(cm, heading, cm.getValue().split('\n'));
+      cm.setCursor({ line, ch: 0 });
+      cm.scrollTo(null, cm.heightAtLine(line, 'local') - headingMargin());
+      cm.focus();
+    }
+    markCurrentEntry();
+  }
+
+  /**
+   * The entry whose section is at the top of the view is lit. ByteMD works it
+   * out from the source and the preview together, which stood still in the
+   * reading view, where the source is hidden, and in the write view, where
+   * the preview is; here it is read from whichever pane is showing.
+   */
+  function queueMark(): void {
+    if (markQueued) return;
+    markQueued = true;
+    requestAnimationFrame(() => {
+      markQueued = false;
+      markCurrentEntry();
+    });
+  }
+
+  function markCurrentEntry(): void {
+    if (!drawerOpen()) return;
+    const items = entries();
+    const headings = markedHeadings();
+    let tops: number[];
+    let top: number;
+    if (host.dataset.mode === 'write') {
+      if (!cm) return;
+      const editor = cm;
+      const lines = editor.getValue().split('\n');
+      tops = headings.map((heading) =>
+        editor.heightAtLine(sourceLine(editor, heading, lines), 'local'),
+      );
+      const info = editor.getScrollInfo();
+      // At the end of the scroll the last headings can no longer reach the
+      // top: then every heading in view counts as passed.
+      const atEnd = info.top >= info.height - info.clientHeight - 1;
+      top = info.top + (atEnd ? info.clientHeight : headingMargin() + 1);
+    } else {
+      const pane = preview();
+      if (!pane) return;
+      const paneTop = pane.getBoundingClientRect().top;
+      tops = headings.map((heading) => heading.getBoundingClientRect().top - paneTop);
+      const atEnd = pane.scrollTop >= pane.scrollHeight - pane.clientHeight - 1;
+      top = atEnd ? pane.clientHeight : headingMargin() + 1;
+    }
+    const current = currentHeading(tops, top);
+    items.forEach((item, index) =>
+      item.classList.toggle('is-current', index === current),
+    );
+  }
+
+  // Through the capture phase, so ByteMD's own handler on the entry never
+  // runs: it would scroll to a heading of its own counting.
+  host.addEventListener(
+    'click',
+    (event) => {
+      const item = (event.target as HTMLElement).closest<HTMLElement>('.bytemd-toc li');
+      if (!item) return;
+      event.stopPropagation();
+      goToEntry(item);
+    },
+    { capture: true },
+  );
+  host.addEventListener(
+    'keydown',
+    (event) => {
+      const item = (event.target as HTMLElement).closest<HTMLElement>('.bytemd-toc li');
+      if (!item || !['Enter', 'Space'].includes(event.code)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      goToEntry(item);
+    },
+    { capture: true },
+  );
+  // Scrolling, opening the drawer and every redraw of its entries light the
+  // current one — at most once a frame, since each pass measures every heading.
+  host.addEventListener('scroll', queueMark, { capture: true });
+  host.addEventListener('click', queueMark);
 
   return {
     setText(next, caret) {
@@ -724,6 +861,7 @@ export function createEditor(
       if (was === 'write' && next !== 'write')
         component.$set({ plugins: withBridge(painted) });
       if (was === 'read' && next !== 'read') cm?.refresh();
+      queueMark();
     },
     // Mermaid draws its colours into the SVG, so a theme change is a new plugin
     // list rather than a stylesheet swap.

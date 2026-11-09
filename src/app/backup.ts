@@ -15,7 +15,7 @@
  */
 import type { Draft } from '../storage/types.ts';
 import { SCHEMA_VERSION } from '../storage/types.ts';
-import { isTextFile, newDraft, slugOf } from './model.ts';
+import { cleanName, isTextFile, newDraft, slugOf } from './model.ts';
 import { strings } from './strings.ts';
 import type { ZipEntry } from './zip.ts';
 
@@ -65,7 +65,10 @@ export function exportName(now = Date.now()): string {
   return `scratchpad-markdown-${day(now)}.zip`;
 }
 
-/** Every draft with text in it, whole. Empty drafts have nothing to keep. */
+/**
+ * Every draft with text in it, or a name, whole. Empty drafts have nothing to
+ * keep.
+ */
 export function writeBackup(drafts: Draft[], now = Date.now()): string {
   const file: BackupFile = {
     app: 'scratchpad',
@@ -73,7 +76,7 @@ export function writeBackup(drafts: Draft[], now = Date.now()): string {
     version: 1,
     createdAt: now,
     drafts: drafts
-      .filter((draft) => draft.text.trim())
+      .filter((draft) => draft.text.trim() || draft.name)
       .map((draft) => ({ ...draft, schemaVersion: SCHEMA_VERSION })),
   };
   return `${JSON.stringify(file, null, 2)}\n`;
@@ -125,18 +128,25 @@ export function readBackup(text: string, now = Date.now()): Backup {
     };
     if (Number.isFinite(draft.caret)) restored.caret = draft.caret!;
     if (Number.isFinite(draft.scroll)) restored.scroll = draft.scroll!;
+    // Tidied as a typed one is: a backup is a file anyone can edit.
+    const name = typeof draft.name === 'string' ? cleanName(draft.name) : undefined;
+    if (name) restored.name = name;
+    // A name with no date of its own — written by hand — is dated now, or it
+    // would never win over a copy that is already here.
+    if (Number.isFinite(draft.nameAt)) restored.nameAt = Math.min(draft.nameAt!, now);
+    else if (name) restored.nameAt = now;
     return restored;
   });
   return { createdAt: Number(file.createdAt) || 0, drafts };
 }
 
-/** One `.md` per draft, named after its title, dated by its last change. */
+/** One `.md` per draft, named after its name or title, dated by its last change. */
 export function markdownEntries(drafts: Draft[]): ZipEntry[] {
   const taken = new Set<string>();
   const entries: ZipEntry[] = [];
   for (const draft of drafts) {
     if (!draft.text.trim()) continue;
-    const slug = slugOf(draft.text);
+    const slug = slugOf(draft.text, draft.name);
     let file = `${slug}.md`;
     for (let n = 2; taken.has(file); n++) file = `${slug}-${n}.md`;
     taken.add(file);

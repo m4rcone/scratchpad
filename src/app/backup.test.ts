@@ -133,3 +133,52 @@ test('a zip of notes opens its text files as drafts dated by each file', () => {
     'a date in the future is taken as now',
   );
 });
+
+test('a name comes back with its draft, and a hand-edited one is tidied', () => {
+  const drafts = [
+    draft({ id: 'a', text: 'alpha', name: 'Named', nameAt: 7 }),
+    draft({ id: 'b', text: 'beta', nameAt: 8 }),
+  ];
+  assert.deepEqual(readBackup(writeBackup(drafts, 99), 100).drafts, drafts);
+
+  const edited = JSON.stringify({
+    app: 'scratchpad',
+    kind: 'backup',
+    version: 1,
+    createdAt: 1,
+    drafts: [
+      draft({ id: 'c', text: 'x', name: '  two\nlines  ' as string, nameAt: 9e15 }),
+      { ...draft({ id: 'd', text: 'y' }), name: 42 },
+    ],
+  });
+  const [tidied, wrong] = readBackup(edited, 100).drafts;
+  assert.equal(tidied?.name, 'two lines');
+  assert.equal(tidied?.nameAt, 100, 'never dated ahead of the restore');
+  assert.equal(wrong?.name, undefined, 'a name that is not text is dropped');
+});
+
+test('a named draft exports under its name', () => {
+  const entries = markdownEntries([
+    draft({ id: 'a', text: 'You are a helpful assistant', name: 'Revisor de PR' }),
+  ]);
+  assert.equal(entries[0]?.name, 'revisor-de-pr.md');
+});
+
+test('a name written by hand without its date is dated at the restore', () => {
+  const file = JSON.stringify({
+    app: 'scratchpad',
+    kind: 'backup',
+    version: 1,
+    createdAt: 1,
+    drafts: [draft({ id: 'x', text: 'same', name: 'Mine' })],
+  });
+  assert.equal(readBackup(file, 100).drafts[0]?.nameAt, 100);
+});
+
+test('a named empty draft is kept in a backup', () => {
+  const backup = readBackup(
+    writeBackup([draft({ id: 'n', text: '', name: 'For later', nameAt: 1 })], 9),
+    10,
+  );
+  assert.equal(backup.drafts[0]?.name, 'For later');
+});

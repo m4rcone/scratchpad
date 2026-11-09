@@ -2,6 +2,7 @@
  * Draft storage on IndexedDB: no practical size ceiling and asynchronous
  * writes, so saving never blocks typing.
  */
+import { mergeDraft, renamedLater } from './merge.ts';
 import type { Draft, DraftStore } from './types.ts';
 
 const DB_NAME = 'scratchpad';
@@ -73,7 +74,16 @@ export function indexedDbStore(): DraftStore {
         const read = store.get(copy.id);
         read.onsuccess = () => {
           const stored = read.result as Draft | undefined;
-          if (!stored || stored.updatedAt <= copy.updatedAt) store.put(copy);
+          if (!stored) {
+            store.put(copy);
+            return;
+          }
+          // The text and the name are each kept from whichever copy changed
+          // them last: an older caret save keeps the text on the disk, and
+          // must not take away the name another tab has just given.
+          const textWins = stored.updatedAt <= copy.updatedAt;
+          if (textWins || renamedLater(copy, stored))
+            store.put(mergeDraft(stored, copy, textWins));
         };
         return read;
       });

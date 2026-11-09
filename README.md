@@ -26,15 +26,15 @@ Version **1.6.0**.
 - **Always at hand.** Opens from the toolbar or `⌥⇧S`, reusing its tab, on the
   draft you left with the caret in place. Every keystroke is saved.
 - **Write, split, read.** Source with visible, dimmed markers; a live preview
-  beside it; or the rendered page alone, at a reading measure, optionally in a
-  serif.
+  beside it; or the rendered page alone, at a reading measure. The preview can
+  be set in a serif.
 - **Focus.** The text alone, in any view, at a width you set by dragging.
 - **Rich preview.** GitHub-flavoured markdown, code highlighting, LaTeX,
   mermaid and `:emoji:`, with embedded HTML sanitized. Task boxes tick from
   the preview. Front matter is coloured as YAML and left out of the preview.
 - **Drafts.** Titled by their first line, or their front matter's `title:`
-  or `name:`, with full-text search, find and replace, and undo after delete.
-  Two open tabs stay in sync.
+  or `name:`, or renamed from the list without touching the text. Full-text
+  search, find and replace, and undo after delete. Two open tabs stay in sync.
 - **Status bar.** Save state, view, line and column, words and a rough token
   count. Optional line numbers in the margin.
 - **Import and export.** Copy or export a draft as `.md`, drop a `.md` or
