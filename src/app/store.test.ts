@@ -738,3 +738,191 @@ test('an edit is newer than its draft even when the draft is dated ahead', async
   store.write('edited', 6);
   assert.ok(store.active()!.updatedAt > ahead);
 });
+
+test('a rename names the draft without dating its text or moving it', async () => {
+  const { store: d, written } = disk([
+    draft({ id: 'new', text: 'newer', updatedAt: 20 }),
+    draft({ id: 'old', text: 'You are a helpful assistant', updatedAt: 10 }),
+  ]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  store.startRename('old');
+  assert.equal(store.state.renaming, 'old');
+  store.rename('old', '  Revisor   de PR ');
+
+  const old = store.state.drafts.find((x) => x.id === 'old')!;
+  assert.equal(store.state.renaming, null);
+  assert.equal(old.name, 'Revisor de PR');
+  assert.equal(old.updatedAt, 10, 'the text keeps its date');
+  assert.ok(old.nameAt! > 0);
+  assert.deepEqual(
+    store.state.drafts.map((x) => x.id),
+    ['new', 'old'],
+    'the rail keeps its order',
+  );
+  assert.equal(pending()[0]?.name, 'Revisor de PR', 'it waits in the mirror like text');
+  await store.flush();
+  assert.ok(written.some((x) => x.id === 'old'));
+});
+
+test('an empty name, or the title the text already gives, means no name', async () => {
+  const { store: d, written } = disk([draft({ text: '# Plan' })]);
+  const store = createStore(d, noPrefs, 'system');
+  await store.load(() => '');
+
+  store.rename('stored', 'Plan');
+  assert.equal(store.active()?.name, undefined);
+  assert.equal(store.active()?.nameAt, undefined, 'nothing changed, nothing saved');
+  await store.flush();
+  assert.equal(written.length, 0);
+
+  store.rename('stored', 'Roadmap');
+  assert.equal(store.active()?.name, 'Roadmap');
+  store.rename('stored', '   ');
+  assert.equal(store.active()?.name, undefined, 'cleared: the title comes back');
+  assert.ok(store.active()?.nameAt, 'and the clearing is dated, so it travels');
+});
+
+test('cancelling a rename leaves the name as it was', async () => {
+  const store = createStore(
+    disk([draft({ name: 'Kept', nameAt: 1 })]).store,
+    noPrefs,
+    'system',
+  );
+  await store.load(() => '');
+  store.startRename('stored');
+  store.cancelRename();
+  assert.equal(store.state.renaming, null);
+  assert.equal(store.active()?.name, 'Kept');
+});
+
+test("another tab's rename reaches this one, though the text is the same", async () => {
+  const tab = channel();
+  const a = createStore(disk([draft({ text: 'same' })]).store, noPrefs, 'system', tab());
+  const b = createStore(disk([draft({ text: 'same' })]).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+  const before = b.state.replaced;
+
+  a.rename('stored', 'Named in A');
+  await a.flush();
+
+  assert.equal(b.active()?.name, 'Named in A');
+  assert.equal(b.state.replaced, before, 'the editor is not reloaded for a name');
+});
+
+test('a rename in one tab and typing in the other both survive', async () => {
+  const tab = channel();
+  const a = createStore(disk([draft({ text: 'start' })]).store, noPrefs, 'system', tab());
+  const b = createStore(disk([draft({ text: 'start' })]).store, noPrefs, 'system', tab());
+  await a.load(() => '');
+  await b.load(() => '');
+
+  a.rename('stored', 'Plan');
+  b.write('start, and more', 15);
+  await a.flush();
+  await b.flush();
+
+  for (const store of [a, b]) {
+    assert.equal(store.active()?.text, 'start, and more');
+    assert.equal(store.active()?.name, 'Plan');
+  }
+});
+
+test('a backup brings back a name, even onto the same text', async () => {
+  const store = createStore(disk([draft({ text: 'same' })]).store, noPrefs, 'system');
+  await store.load(() => '');
+
+  const outcome = store.importDrafts([
+    draft({ text: 'same', name: 'Restored', nameAt: 5 }),
+  ]);
+
+  assert.deepEqual(outcome, { added: 0, updated: 1, same: 0 });
+  assert.equal(store.active()?.name, 'Restored');
+});
+
+test('a rename left in the mirror is kept, even under newer text on the disk', async () => {
+  mirrored.set(
+    PENDING_KEY,
+    JSON.stringify([draft({ text: 'older', updatedAt: 1, name: 'Mine', nameAt: 3 })]),
+  );
+  const store = createStore(
+    disk([draft({ text: 'newer on the disk', updatedAt: 9 })]).store,
+    noPrefs,
+    'system',
+  );
+
+  const active = await store.load(() => '');
+
+  assert.equal(active?.text, 'newer on the disk');
+  assert.equal(active?.name, 'Mine');
+});
+
+test('a named draft is not cleared away for being empty', async () => {
+  const store = createStore(
+    disk([
+      draft({ id: 'named', text: '', name: 'For later', nameAt: 1, updatedAt: 2 }),
+      draft({ id: 'other', text: 'text', updatedAt: 1 }),
+    ]).store,
+    noPrefs,
+    'system',
+  );
+  await store.load(() => '');
+  store.open('named');
+  store.open('other');
+  assert.ok(store.state.drafts.some((x) => x.id === 'named'));
+});
+
+test('a named empty draft survives another tab clearing it away as empty', async () => {
+  const tab = channel();
+  const a = createStore(
+    disk([draft({ text: 'the only one' })]).store,
+    noPrefs,
+    'system',
+    tab(),
+  );
+  const b = createStore(
+    disk([draft({ text: 'the only one' })]).store,
+    noPrefs,
+    'system',
+    tab(),
+  );
+  await a.load(() => '');
+  await b.load(() => '');
+
+  // A deletes its only draft, and the blank it puts in its place reaches B.
+  await a.remove();
+  await a.flush();
+  const blank = a.active()!.id;
+  assert.ok(b.state.drafts.some((x) => x.id === blank));
+
+  // B moves on to a draft of its own and names the blank; before A hears of
+  // it, A undoes, clearing its blank away.
+  b.create('elsewhere');
+  b.rename(blank, 'For later');
+  a.undoRemove();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(
+    b.state.drafts.find((x) => x.id === blank)?.name,
+    'For later',
+    'kept here, where it has a name',
+  );
+});
+
+test('deleting a named empty draft asks first, and can be undone', async () => {
+  const store = createStore(
+    disk([draft({ text: '', name: 'For later', nameAt: 1 })]).store,
+    noPrefs,
+    'system',
+  );
+  await store.load(() => '');
+
+  assert.equal(store.requestDelete(), 'confirm');
+  assert.equal(store.requestDelete(), 'deleted');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.state.deleted, true, 'the undo is offered');
+  assert.ok(store.undoRemove());
+  assert.equal(store.active()?.name, 'For later');
+});

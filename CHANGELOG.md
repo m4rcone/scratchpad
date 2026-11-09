@@ -5,6 +5,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-11-09
+
+### Added
+
+- Rename a draft from the list: the pencil that takes the place of its time
+  under the pointer, or a double click on it. The name stands over the title
+  the text gives, everywhere the draft is named — the list, search, the tab
+  and an exported file — and the text itself is left as it is, so a prompt
+  copied whole carries no title with it. An empty name goes back to the
+  text's own title. Renaming does not move the draft up the list, and the
+  name follows to other tabs and into backups.
+
+### Changed
+
+- The serif reading typeface also sets the preview in split view, so moving
+  between split and read no longer changes the face of the same text.
+- The drafts list shows a soft shadow at its top or bottom while drafts still
+  hide there, as wide code blocks and tables do at their sides.
+
+### Fixed
+
+- Opening a draft from far down the list threw the list back to its top. It
+  stays where it was, and moves only to show a draft opened from elsewhere — a
+  new one, or one picked in search.
+- The table of contents led to the wrong heading once the draft had a heading
+  in a quote or a list, or an empty `#`: every entry after it was out by one.
+  In the write view it went nowhere; it now takes the source to the heading,
+  caret on it. The entry for the section in view is lit in every view; in
+  reading it stayed on the first.
+- A heading picked in the table of contents, or a `#fragment` or footnote
+  link's target, landed under the toolbar. It now stops just below it.
+- On Windows and Linux, the find bar's buttons named their keys as on a Mac
+  (`⇧↵`); they read `Shift+Enter` and `Enter` there.
+
 ## [1.6.0] — 2026-10-18
 
 ### Changed
@@ -276,7 +310,8 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.6.0...HEAD
+[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/m4rcone/scratchpad/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/m4rcone/scratchpad/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/m4rcone/scratchpad/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/m4rcone/scratchpad/compare/v1.3.0...v1.4.0

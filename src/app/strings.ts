@@ -7,6 +7,8 @@ import { isMac, isTouch, shortcut } from './platform.ts';
 const hint = (key: string, shift = false) => (isTouch ? '' : ` ${shortcut(key, shift)}`);
 /** Enter as the platform writes it in a chord: `⌘⇧↵`, `Ctrl+Shift+Enter`. */
 const ENTER = isMac ? '↵' : 'Enter';
+/** Shift+Enter, with no command modifier: `⇧↵`, `Shift+Enter`. */
+const SHIFT_ENTER = isMac ? '⇧↵' : 'Shift+Enter';
 
 export const strings = {
   emptyHint: 'write, paste or drop a file',
@@ -20,6 +22,10 @@ export const strings = {
   searchDrafts: 'search drafts',
   searchKeys: isTouch ? '' : shortcut('F', true),
   railEmpty: 'no drafts yet',
+  rename: 'rename',
+  /** `title` arrives escaped, from the rail's markup. */
+  renameLabel: (title: string) => `rename ${title}`,
+  renameField: 'name this draft, or leave it empty for its own title',
   draftsButton: 'drafts',
   viewWrite: 'write',
   viewSplit: 'split',
@@ -112,8 +118,8 @@ export const strings = {
   zipFailed: 'could not read that .zip',
   findPlaceholder: 'find',
   replacePlaceholder: 'replace with',
-  findPrev: isTouch ? 'previous match' : 'previous match (⇧↵)',
-  findNext: isTouch ? 'next match' : 'next match (↵)',
+  findPrev: isTouch ? 'previous match' : `previous match (${SHIFT_ENTER})`,
+  findNext: isTouch ? 'next match' : `next match (${ENTER})`,
   matchCase: 'match case',
   toggleReplace: 'replace',
   replaceOne: 'replace',
@@ -198,6 +204,6 @@ export const strings = {
     [shortcut('/'), 'preview beside'],
     [shortcut('P', true), 'read'],
     [shortcut('F', true), 'search drafts'],
-    [shortcut('F'), 'find in this draft'],
+    [shortcut('F'), 'find in draft'],
   ] as [string, string][],
 };

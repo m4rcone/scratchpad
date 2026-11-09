@@ -29,7 +29,7 @@ import { createSettings } from '../app/settings.ts';
 import type { PendingRestore } from '../app/settings.ts';
 import { createStore } from '../app/store.ts';
 import type { State } from '../app/store.ts';
-import { isArchive, isBackupFile, isTextFile, slugOf, titleOf } from '../app/model.ts';
+import { draftTitle, isArchive, isBackupFile, isTextFile, slugOf } from '../app/model.ts';
 import { isMod, isTouch, scrollbarWidth, shortcutKey } from '../app/platform.ts';
 import { strings } from '../app/strings.ts';
 import { applyTheme, bootTheme, effectiveTheme, systemTheme } from '../app/theme.ts';
@@ -244,7 +244,7 @@ function paint(state: State): void {
   }
 
   // The tab strip and the history show which draft this is.
-  const title = active ? titleOf(active.text) : '';
+  const title = active ? draftTitle(active) : '';
   document.title = title ? `${title} – ${strings.appName}` : strings.appName;
   paintRail(state);
   paintRailButton(state);
@@ -443,7 +443,7 @@ function download(blob: Blob, name: string): void {
 
 function exportDraft(): void {
   const text = editor.getText();
-  const name = `${slugOf(text)}.md`;
+  const name = `${slugOf(text, store.active()?.name)}.md`;
   download(new Blob([text], { type: 'text/markdown' }), name);
   footer.acknowledge('export', strings.exported(name));
   store.flash(strings.exported(name));
@@ -739,11 +739,54 @@ railEl.addEventListener('click', (event) => {
     '[data-id],[data-action]',
   );
   if (!target) return;
-  if (target.dataset.id) openDraft(target.dataset.id);
+  if (target.dataset.action === 'rename') store.startRename(target.dataset.id!);
+  else if (target.dataset.id) openDraft(target.dataset.id);
   else if (target.dataset.action === 'new') createDraft();
   else if (target.dataset.action === 'search') store.setSearch(true);
   else if (target.dataset.action === 'settings') store.setSettings(true);
   else if (target.dataset.action === 'close') store.setRail(false);
+});
+
+/*
+ * Naming a draft in the rail (`rail.ts`). Enter keeps the name and goes back
+ * to the text; escape keeps the old one. Leaving the field keeps what was
+ * typed, as does one of the app's shortcuts pressed inside it: whatever the
+ * shortcut opens, the name is not lost on the way. The field's own keys —
+ * select all, paste, undo, a word back — are left to the field.
+ */
+const renameField = (event: Event) => {
+  const target = event.target as HTMLElement;
+  return target.classList?.contains('rail__input') ? (target as HTMLInputElement) : null;
+};
+function commitRename(field: HTMLInputElement): void {
+  if (store.state.renaming === field.dataset.rename)
+    store.rename(field.dataset.rename!, field.value);
+}
+
+railEl.addEventListener('dblclick', (event) => {
+  const row = (event.target as HTMLElement).closest<HTMLElement>('.rail__row');
+  if (row?.dataset.id) store.startRename(row.dataset.id);
+});
+
+railEl.addEventListener('keydown', (event) => {
+  const field = renameField(event);
+  if (!field || event.isComposing) return;
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    commitRename(field);
+    editor.focus();
+  } else if (event.key === 'Escape') {
+    // Kept from the page's own escape, which would close the rail as well.
+    event.preventDefault();
+    event.stopPropagation();
+    store.cancelRename();
+    editor.focus();
+  } else if (isAppChord(event)) commitRename(field);
+});
+
+railEl.addEventListener('focusout', (event) => {
+  const field = renameField(event);
+  if (field) commitRename(field);
 });
 
 /**
@@ -842,6 +885,25 @@ wide.addEventListener('change', () => paint(store.state));
  * only because the `save`, `find` and `findNext` commands CodeMirror binds
  * them to are never defined — loading its search addon would take them away.
  */
+/**
+ * The chords the handler below answers, for the rename field to keep its name
+ * before one of them takes the page elsewhere. Kept beside the handler: a
+ * chord added there belongs here too.
+ */
+function isAppChord(event: KeyboardEvent): boolean {
+  if (!isMod(event)) return false;
+  const key = shortcutKey(event);
+  // `/` sits on a shifted key on some layouts, so it is matched either way.
+  if (event.key === '/' || key === 'g') return true;
+  if (event.shiftKey)
+    return (
+      ['f', 'p', 'd', 'a'].includes(key) ||
+      event.key === 'Enter' ||
+      event.code === 'Comma'
+    );
+  return ['s', 'f'].includes(key);
+}
+
 window.addEventListener('keydown', (event) => {
   if (event.isComposing) return;
   const state = store.state;

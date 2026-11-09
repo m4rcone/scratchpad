@@ -1,4 +1,4 @@
-/** Pure helpers over a draft: title, slug, snippet, counters and grouping. */
+/** Pure helpers over a draft: title, name, slug, snippet, counters and grouping. */
 import type { Draft } from '../storage/types.ts';
 import { SCHEMA_VERSION } from '../storage/types.ts';
 import { strings } from './strings.ts';
@@ -57,8 +57,29 @@ export function titleOf(text: string): string {
     .slice(0, 46);
 }
 
-export function slugOf(text: string): string {
-  const slug = titleOf(text)
+/** The longest name a draft can be given by hand. */
+export const NAME_LENGTH = 80;
+
+/**
+ * A name as typed, tidied: one line, single spaces, not past the limit.
+ * Nothing left means no name — the draft goes back to its own title.
+ */
+export function cleanName(raw: string): string | undefined {
+  const name = raw.replace(/\s+/g, ' ').trim().slice(0, NAME_LENGTH).trim();
+  return name || undefined;
+}
+
+/**
+ * What a draft is called: the name given by hand, or the title its text
+ * gives it. Everywhere the draft is listed or named goes through here.
+ */
+export function draftTitle(draft: { text: string; name?: string }): string {
+  return draft.name || titleOf(draft.text);
+}
+
+/** The file name a draft exports under: its name if it has one, else its title. */
+export function slugOf(text: string, name?: string): string {
+  const slug = (name || titleOf(text))
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -114,7 +135,7 @@ const needleOf = (query: string) => folded(query.trim());
  * the title is already printed right above it, so repeating it says nothing.
  * With one, it is a window centred on the first match, title included.
  */
-export function snippetOf(text: string, query: string): string {
+export function snippetOf(text: string, query: string, named = false): string {
   const flatten = (value: string) =>
     value
       .replace(/\s+/g, ' ')
@@ -125,10 +146,11 @@ export function snippetOf(text: string, query: string): string {
   const needle = needleOf(query);
   if (!needle) {
     // After the front matter, and after the line the title came from, if it
-    // came from one: the title's own line is already printed above.
+    // came from one: the title's own line is already printed above. A draft
+    // named by hand has none of its lines above, so it starts at the first.
     const front = frontMatterOf(text);
     const lines = text.split('\n').slice(front.lines);
-    const first = front.name ? 0 : lines.findIndex((line) => line.trim()) + 1;
+    const first = front.name || named ? 0 : lines.findIndex((line) => line.trim()) + 1;
     const body = flatten(lines.slice(first).join('\n'));
     return body.slice(0, limit) + (body.length > limit ? '…' : '');
   }
@@ -219,7 +241,11 @@ export function isBackupFile(name: string): boolean {
   return /\.json$/i.test(name);
 }
 
-/** Whether a draft holds the query, in any case and with or without accents. */
+/**
+ * Whether a draft holds the query, in its text or its name, in any case and
+ * with or without accents.
+ */
 export function matches(draft: Draft, query: string): boolean {
-  return folded(draft.text).includes(needleOf(query));
+  const needle = needleOf(query);
+  return folded(draft.text).includes(needle) || folded(draft.name ?? '').includes(needle);
 }

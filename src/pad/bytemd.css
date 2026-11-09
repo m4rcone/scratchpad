@@ -426,8 +426,13 @@
 
 /* ---------- the reading typeface ---------- */
 
-/* Chosen in settings. Code, key caps and diagrams keep their own faces. */
-:root[data-reading='serif'] .editor[data-mode='read'] .bytemd-preview .markdown-body {
+/* Chosen in settings, for the preview wherever it shows: alone in read, and
+   beside the source in split. Code, key caps and diagrams keep their own
+   faces. */
+:root[data-reading='serif']
+  .editor:is([data-mode='read'], [data-mode='split'])
+  .bytemd-preview
+  .markdown-body {
   font-family: var(--serif);
   font-size: var(--serif-size);
 }
@@ -562,6 +567,13 @@
 }
 
 /* ---------- the preview ---------- */
+
+/* ByteMD's own link handler scrolls a `#fragment` or footnote target to the
+   pane's top, where the toolbar floats; the margin stops it just below the
+   bar, where the app's own jumps (`scrollPaneTo` in `editor.ts`) stop too. */
+.bytemd-preview :is(h1, h2, h3, h4, h5, h6, [id]) {
+  scroll-margin-top: calc(var(--toolbar-h) + 16px);
+}
 
 /*
  * The preview is the rendered page, so it reads in the system's own text face
@@ -958,7 +970,14 @@
   color: var(--muted);
 }
 
+/* The entry lit is the app's (`is-current`, from `editor.ts`): ByteMD's own
+   stood still in the reading and write views, and is undone here. */
 .bytemd-toc-active {
+  color: inherit;
+  background: none;
+}
+
+.bytemd-toc li.is-current {
   color: var(--accent);
   background: var(--code-bg);
 }

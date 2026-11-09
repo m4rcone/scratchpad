@@ -17,6 +17,7 @@ import { imagePlaceholders } from './images.ts';
 import type { HastNode } from './images.ts';
 import { blankFrontMatter } from './syntax.ts';
 import { enableTaskBoxes } from './tasks.ts';
+import { markHeadings } from './toc.ts';
 
 // KaTeX's own stylesheet. The maths engine itself is behind a dynamic import
 // inside the plugin, so it only loads when a draft actually contains maths.
@@ -49,6 +50,12 @@ const taskBoxes: BytemdPlugin = {
     processor.use(() => (tree: unknown) => enableTaskBoxes(tree as HastNode)),
 };
 
+/** See `toc.ts`: the headings the contents drawer lists, told where they start. */
+const contentsHeadings: BytemdPlugin = {
+  rehype: (processor) =>
+    processor.use(() => (tree: unknown) => markHeadings(tree as HastNode)),
+};
+
 export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
   return [
     gfm(),
@@ -62,5 +69,6 @@ export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
     frontMatter,
     noRemoteImages,
     taskBoxes,
+    contentsHeadings,
   ];
 }

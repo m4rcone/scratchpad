@@ -20,6 +20,17 @@ export interface Draft {
    * pixels, because the same draft is taller in a narrower window.
    */
   scroll?: number;
+  /**
+   * A name given by hand, over the title the text would give it. Absent for
+   * the title the text gives, which is most drafts.
+   */
+  name?: string;
+  /**
+   * When the name was last given or cleared. Apart from `updatedAt`, which
+   * dates the text and orders the rail: a rename is not an edit. See
+   * `merge.ts`.
+   */
+  nameAt?: number;
 }
 
 export interface DraftStore {
@@ -28,7 +39,8 @@ export interface DraftStore {
   /**
    * Writes the draft, unless the disk already holds a newer change to it:
    * a tab saving only its caret must not put its older text back over the
-   * text another tab has just written.
+   * text another tab has just written. The text and the name are weighed
+   * apart (`merge.ts`), so a newer name on either side is kept too.
    */
   put(draft: Draft): Promise<void>;
   remove(id: string): Promise<void>;

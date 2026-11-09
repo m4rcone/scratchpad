@@ -9,7 +9,7 @@
  */
 import type { State } from './store.ts';
 import { escapeHtml, keyHints, markMatches, withKey } from './html.ts';
-import { matches, snippetOf, timeLabel, titleOf } from './model.ts';
+import { draftTitle, matches, snippetOf, timeLabel } from './model.ts';
 import { strings } from './strings.ts';
 import type { Draft } from '../storage/types.ts';
 
@@ -60,10 +60,10 @@ export function createSearch(root: HTMLElement): Search {
             index,
           ) => `<button type="button" class="result" id="result-${escapeHtml(draft.id)}" role="option" aria-selected="false" data-id="${escapeHtml(draft.id)}" data-index="${index}">
             <span class="result__head">
-              <span class="result__title">${markMatches(titleOf(draft.text) || strings.untitled, query)}</span>
+              <span class="result__title">${markMatches(draftTitle(draft) || strings.untitled, query)}</span>
               <span class="result__time">${escapeHtml(timeLabel(draft.updatedAt))}</span>
             </span>
-            <span class="result__snippet">${markMatches(snippetOf(draft.text, query), query)}</span>
+            <span class="result__snippet">${markMatches(snippetOf(draft.text, query, !!draft.name), query)}</span>
           </button>`,
         )
         .join('');
