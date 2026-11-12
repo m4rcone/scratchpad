@@ -1,6 +1,6 @@
 {
   "name": "scratchpad",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "description": "A markdown scratchpad on the Chrome toolbar (MV3). No account, no network, data stays on your machine.",
   "keywords": [

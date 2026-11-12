@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-11-12
+
+### Fixed
+
+- Prices no longer turn into formulas: `R$ 600 a R$ 900` rendered ` 600 a R`
+  as maths, since any two `$` on a line made one. A single `$` now opens a
+  formula only when no letter or digit sits right before it and no space right
+  after, and closes one only after something other than a space and when no
+  digit follows. `$x$` and `$\alpha + 1$` render as before; `$ x $`, spaced
+  inside, is text.
+
 ## [1.7.0] — 2026-11-09
 
 ### Added
@@ -310,7 +321,8 @@ First release.
 - A content security policy that allows nothing outside the package: no network
   requests, and remote images in drafts are not loaded.
 
-[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.7.0...HEAD
+[unreleased]: https://github.com/m4rcone/scratchpad/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/m4rcone/scratchpad/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/m4rcone/scratchpad/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/m4rcone/scratchpad/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/m4rcone/scratchpad/compare/v1.4.0...v1.5.0

@@ -13,6 +13,7 @@ import gfm from '@bytemd/plugin-gfm';
 import highlight from '@bytemd/plugin-highlight-ssr';
 import math from '@bytemd/plugin-math';
 import mermaid from '@bytemd/plugin-mermaid';
+import { strictDollars } from './dollars.ts';
 import { imagePlaceholders } from './images.ts';
 import type { HastNode } from './images.ts';
 import { blankFrontMatter } from './syntax.ts';
@@ -44,6 +45,15 @@ const frontMatter: BytemdPlugin = {
     }),
 };
 
+/** See `dollars.ts`: `R$ 600` stays money; `$x$` is still maths. */
+function maths(): BytemdPlugin {
+  const plugin = math();
+  return {
+    ...plugin,
+    remark: (processor) => (plugin.remark?.(processor) ?? processor).use(strictDollars),
+  };
+}
+
 /** See `tasks.ts`: task boxes that tick, written back into the text. */
 const taskBoxes: BytemdPlugin = {
   rehype: (processor) =>
@@ -62,7 +72,7 @@ export function markdownPlugins(theme: 'dark' | 'light'): BytemdPlugin[] {
     // `ignoreMissing` keeps ```klingon from throwing: an unknown language is
     // a plain block, not an error in the middle of someone's notes.
     highlight({ ignoreMissing: true }),
-    math(),
+    maths(),
     mermaid({ theme: theme === 'dark' ? 'dark' : 'default' }),
     breaks(),
     gemoji(),
